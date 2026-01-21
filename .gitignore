@@ -1,0 +1,17 @@
+# RStudio files
+.Rproj.user/
+*.Rproj
+
+# R session files
+.Rhistory
+.RData
+.Ruserdata
+
+# Generated outputs
+*.html
+*.pdf
+*.docx
+
+# Temporary files
+*.tmp
+*.log
