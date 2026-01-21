@@ -3,9 +3,12 @@ library(ggplot2)
 library(reshape2)
 library(purrr)
 library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(Rcpp)
 
-Mode <- function(x) { #compute the mode of a discrete list x
-  ux <- unique(x)
+Mode = function(x) { #compute the mode of a discrete list x
+  ux = unique(x)
   ux[which.max(tabulate(match(x, ux)))]
 }
 
@@ -13,7 +16,7 @@ Mode <- function(x) { #compute the mode of a discrete list x
 
 read_data = function(season, league = 'Premier'){
   # League list: "Premier", "SerieA", "Liga", "Ligue1", "Bundes" 
-  Results<-read.csv(paste0("Data//Results//Result_",league,"_",season, ".csv"), header = TRUE, sep=",")
+  Results=read.csv(paste0("Data//Results//Result_",league,"_",season, ".csv"), header = TRUE, sep=",")
   
   rownames(Results)=Results$Home...Away
   Results=Results[,-1]
@@ -21,8 +24,8 @@ read_data = function(season, league = 'Premier'){
   library(stringi)
   N = nrow(Results)
   
-  X1<-matrix(NA,N,N)
-  X2<-matrix(NA,N,N)
+  X1=matrix(NA,N,N)
+  X2=matrix(NA,N,N)
   for(i in 1:N){
     for(j in 1:N){
       if(i==j || Results[i,j]=="" || is.na(Results[i,j])){
@@ -45,19 +48,18 @@ read_data = function(season, league = 'Premier'){
   return(list(X1,X2))
 }
 
-get_available_seasons = function(league = 'PL'){
-  if (league == 'PL'){
-    return(list(list('9596', 4), list('9697', 14), list('9798', 3),  #3
-                list('9899', 15),list('9900', 18), list('0001', 3),  #6
-                list('0102', 12),list('0203', 17), list('0304', 20), #9
-                list('0405', 16),list('0506', 16), list('0607', 18), #12
-                list('0708', 7), list('0809', 18), list('0910', 19), #15
-                list('1011', 18),list('1112', 20), list('1213', 11), #18
-                list('1314', 7), list('1415', 13), list('1516', 2),  #21
-                list('1617', 15),list('1718', 19), list('1819', 10), #24
-                list('1920', 14),list('2021', 15), list('2122', 15), #27
-                list('2223', 17),list('2324', 17)))
+generate_season_string = function(start_year, end_year) {
+  if (end_year <= start_year) {
+    stop("end_year must be greater than start_year")
   }
+  
+  years = start_year:(end_year - 1)
+  next_years = years + 1
+  
+  format_two_digits = function(x) sprintf("%02d", x %% 100)
+  
+  formatted = paste0(format_two_digits(years), format_two_digits(next_years))
+  return(formatted)
 }
 
 read_historics = function(season, league_acro = 'PL'){
@@ -78,6 +80,95 @@ get_sample_ids = function(n_samples, t, from_t = FALSE, replace_flag = FALSE){
   return(id)
 }
 
+row_to_matrix = function(row, goals = goal_vals) {
+  n = length(goals)
+  mat = matrix(NA, nrow = n, ncol = n,
+                dimnames = list(goals, goals))
+  names(row) = scores
+  
+  for (score in names(row)) {
+    parts = str_split(score, ":")[[1]]
+    home = as.integer(parts[1])
+    away = as.integer(parts[2])
+    
+    # Convert 0-based to 1-based indexing
+    row_idx = home + 1
+    col_idx = away + 1
+    
+    mat[row_idx, col_idx] = as.numeric(row[[score]])
+  }
+  return(mat)
+}
+
+read_odds_matrix = function(df_odds){
+  # df_odds = read.csv(file = paste0("Data/Historics/",league_acro,"_Odds_",season,".csv")
+  #                    , check.names = FALSE
+  # )
+  # Select only columns ending with "_odd"
+  filtered_odds = df_odds %>%
+    select(matches("\\d+:\\d+_odd"))
+  
+  # filtered_odds = final_df %>%
+  # select(matches("X\\d+\\.\\d+_odd"))
+  
+  
+  # Extract score labels
+  scores = colnames(filtered_odds) %>%
+    str_remove("_odd") %>%
+    # str_remove("X") %>%
+    unique()
+  
+  # Get all unique goal values to define matrix size
+  goal_vals = sort(unique(as.integer(unlist(str_split(scores, ":", simplify = TRUE)))))
+  # goal_vals = sort(unique(as.integer(unlist(str_split(scores, ".", simplify = TRUE)))))
+  
+  odds_matrices = lapply(1:nrow(filtered_odds), function(i) row_to_matrix(filtered_odds[i, ]))
+  return(odds_matrices)
+}
+
+merge_hist_odds_df = function(df_odds, df_hist){
+  df1 = df_odds
+  df1 = df1 %>%
+    rename(home_team = home_team, away_team = away_team) %>%
+    mutate(date = dmy(date))
+  
+  df2 = df_hist
+  df2 = df2 %>%
+    rename(home_team = HomeTeam, away_team = AwayTeam, time = Time, date = Date) %>%
+    mutate(date = dmy(date))
+  
+  # --- Step 1: Create a match identifier for both dataframes ---
+  df1 = df1 %>%
+    mutate(match_key = paste0(home_team, "_", away_team, "_", date))
+  
+  df2 = df2 %>%
+    mutate(match_key_raw = paste0(home_team, "_", away_team, "_", date))
+  
+  # --- Step 2: Fuzzy match df1$match_key to df2$match_key_raw ---
+  # Define a custom match function
+  match_games = function(row_key, all_keys) {
+    distances = stringdist::stringdist(row_key, all_keys, method = "jw")
+    best_match_index = which.min(distances)
+    return(best_match_index)
+  }
+  
+  # Apply matching
+  match_indices = map_int(df1$match_key, ~match_games(.x, df2$match_key_raw))
+  
+  # Create matched dataframe
+  df1_matched = df1 %>%
+    mutate(matched_index = match_indices)
+  
+  df2_matched = df2 %>%
+    mutate(row_id = row_number())
+  
+  # --- Step 3: Join based on matched indices ---
+  final_df = df2_matched %>%
+    left_join(df1_matched, by = c("row_id" = "matched_index"))
+  
+  return(final_df)
+}
+
 load_MH = function(season, distr, n_games = FALSE, league_acro = 'PL'){
   if (is.numeric(n_games)){
     load(file = paste0("Data//MH_Results//Mid//",league_acro,"_",as.character(season),
@@ -90,75 +181,103 @@ load_MH = function(season, distr, n_games = FALSE, league_acro = 'PL'){
          envir = .GlobalEnv)
   }
 }
+
 # Rejection Sampler for multiple draws from COM-Poisson as in Benson(2021)
 
-geom_envelope_draws = function(n, mu, nu){
+cppFunction('
+NumericVector fast_runif(int n) {
+  NumericVector result(n);
+  for(int i = 0; i < n; ++i) {
+    result[i] = R::runif(0.0, 1.0);  // Generate random numbers between 0 and 1
+  }
+  return result;
+}')
+
+geom_envelope_draws = function(n, mu, nu, return_ndraws = FALSE) {
+  samples = numeric(n)
+  n_draws = numeric(n)
+  log_Bfgs = numeric(n)
+  
   p = (2*nu)/(2*mu*nu + 1 + nu)
   
   xm = floor(mu/((1-p)**(1/nu)))
   
-  B = (1/p) * (mu**(nu*xm)) /
-    ((1-p)**xm * (factorial(xm)**nu))
-  
-  samples = numeric(n)
+  log_B = -log(p) + nu*xm*log(mu) - xm*log(1-p) - nu*lfactorial(xm)
   
   for(i in 1:n){
+    c = 0
     while (TRUE){
-      #attempts
-      u_0 = runif(1)
+      c = c + 1
+      
+      u_0 = fast_runif(1)
       x = floor(log(u_0)/log(1-p))
       
-      alpha = (mu**x/factorial(x))**nu/(p*B*(1-p)**x)
-      if (is.nan(alpha)){
-        next
-      }
+      log_alpha = nu*( x*log(mu) - lfactorial(x) ) - log_B - x*log(1-p) - log(p)
       
-      u = runif(1)
+      u = fast_runif(1)
       
-      if (u <= alpha){
+      if (u <= exp(log_alpha)){
         samples[i] = x
+        n_draws[i] = c
+        log_Bfgs[i] = log_B
         break
       }
     }
   }
-  return(samples)
+  if (return_ndraws) {return(list("samples" = samples, "n_draws" = n_draws, "log_Bfg" = log_Bfgs))} 
+  else {return(samples)}
 }
 
-pois_envelope_draws = function(n, mu, nu){
-  B = ((mu**floor(mu))/factorial(floor(mu)))**(nu-1)
-  
+pois_envelope_draws = function(n, mu, nu, return_ndraws = FALSE){
   samples = numeric(n)
+  n_draws = numeric(n)
+  log_Bfgs = numeric(n)
+  
+  log_B = (nu-1)*( floor(mu)*log(mu) - lfactorial(floor(mu)) )
   
   for(i in 1:n){
+    c = 0
     while(TRUE){
+      c = c + 1
+      
       x = rpois(1, mu)
       
-      alpha = (mu**x/factorial(x))**nu/(B * (mu**x)/factorial(x))
+      log_alpha = nu*(x*log(mu) - lfactorial(x)) - log_B - x*log(mu) + lfactorial(x)
       
-      if (is.nan(alpha)){
-        next
-      }
-      u = runif(1)
+      u = fast_runif(1)
       
-      if (u <= alpha){
+      if (u <= exp(log_alpha)){
         samples[i] = x
+        n_draws[i] = c
+        log_Bfgs[i] = log_B
         break
       }
     }
   }
-  return(samples)
   
+  if (return_ndraws) {return(list("samples" = samples, "n_draws" = n_draws, "log_Bfg" = log_Bfgs))} 
+  else {return(samples)}
 }
 
-rejection_sampler_draws = function(n, mu, nu){
+rejection_sampler_draws = function(n, mu, nu, return_ndraws = FALSE){
   if (nu < 1){
-    x = geom_envelope_draws(n, mu, nu)
-  } else {
-    x = pois_envelope_draws(n, mu, nu)
+    x = geom_envelope_draws(n, mu, nu, return_ndraws)
+  } else { #nu >= 1
+    x = pois_envelope_draws(n, mu, nu, return_ndraws)
   }
   return(x)
 }
 
+rejection_sampler_draws_vec = function(n, mu, nu, return_ndraws = FALSE){
+  x = mapply(function(n_val, mu_val, nu_val, return_ndraws_val) {
+    if (nu_val < 1) {
+      return(geom_envelope_draws(n, mu, nu_val, return_ndraws))
+    } else {
+      return(pois_envelope_draws(n, mu, nu_val, return_ndraws))
+    }
+  }, n, mu, nu, return_ndraws, SIMPLIFY = FALSE)
+  return(x)
+}
 ### End sampler for COM-Poisson
 
 ### Functions to plot and summarize results
@@ -173,7 +292,7 @@ retrieve_acceptance_rates = function(MH_obj, param = 'all', burnin = 'default'){
   
   iters = MH_obj$iterations - t_burn
   
-  print(iters)
+  # print(iters)
   
   if (param == 'all'){
     output = c() #ADAPT THIS
@@ -201,10 +320,10 @@ retrieve_acceptance_rates = function(MH_obj, param = 'all', burnin = 'default'){
     }
     
     temp = MH_obj$home_post[t_burn:MH_obj$iterations]
-    print('home')
-    print(length(temp))
-    print(t_burn)
-    print(MH_obj$iterations)
+    # print('home')
+    # print(length(temp))
+    # print(t_burn)
+    # print(MH_obj$iterations)
     c = 0
     for (t in 2:iters){
       if (temp[t] != temp[t-1]){c = c+1}
@@ -214,15 +333,15 @@ retrieve_acceptance_rates = function(MH_obj, param = 'all', burnin = 'default'){
     if(MH_obj$distr_type == 'CP_D'){
       for (i in 1:N){
         temp = nu[[i]]
-        print(temp)
-        print(length(temp))
+        # print(temp)
+        # print(length(temp))
         c = 0
         for (t in 2:iters){
           if (temp[t] != temp[t-1]){c = c+1}
         }
         output = append(output, setNames(c/iters, paste0('nu',i)))
       }
-    } else {
+    } else if (MH_obj$distr_type == 'CP'){
       temp = MH_obj$nu_home[t_burn:MH_obj$iterations]
       c = 0
       for (t in 2:iters){
@@ -249,10 +368,12 @@ retrieve_post_longlists = function(MH_obj, param, burnin = 'default'){
   if (param == 'def'){
     post = MH_obj$def_post
   }
-  
   if (param == 'nu'){
     post = MH_obj$nu
   }
+  # if (param == 'all'){
+  #   
+  # }
   
   if (burnin == 'default'){
     post = post[(MH_obj$iterations/2):MH_obj$iterations]
@@ -271,8 +392,8 @@ retrieve_summary = function(MH_obj, burnin = 'default'){
     t_burn = burnin
   }
   
-  att_chains = retrieve_post_longlists(MH_obj, 'att')
-  def_chains = retrieve_post_longlists(MH_obj, 'def')
+  att_chains = retrieve_post_longlists(MH_obj, 'att', burnin)
+  def_chains = retrieve_post_longlists(MH_obj, 'def', burnin)
   home_chain = MH_obj$home_post[t_burn:MH_obj$iterations]
   
   home = c(mean = mean(home_chain), sd = sd(home_chain),  quantile(home_chain, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)))
@@ -303,7 +424,7 @@ retrieve_summary = function(MH_obj, burnin = 'default'){
   }
   
   if (MH_obj$distr_type == 'CP_D'){
-    nu_chains = retrieve_post_longlists(MH_obj, 'nu')
+    nu_chains = retrieve_post_longlists(MH_obj, 'nu', burnin)
     
     for (i in 1:N){
       nu_i = nu_chains[[i]]
@@ -316,13 +437,119 @@ retrieve_summary = function(MH_obj, burnin = 'default'){
   return(out_df)
 }
 
+retrieve_pars_summ = function(MH_obj, param_list = NULL, burn_in = 0.5, probs = c(0.05, 0.25, 0.5, 0.75, 0.95)){
+  N = length(MH_obj$team_names)
+  T_ = MH_obj$iterations
+  
+  t_start = round(T_*burn_in)
+  
+  if (is.null(param_list)){
+    if (MH_obj$distr_type == 'P'){
+      param_list = list('home', 'att', 'def')
+    } else{
+      param_list = list('home', 'att', 'def', 'nu')
+    }
+  }
+  
+  out = list()
+  
+  for (i in seq_along(param_list)) {
+    mat = as.matrix(MH_obj[[paste0(param_list[[i]],'_post')]])
+    mat = mat[t_start:T_, ,drop = FALSE]
+    
+    summaries = apply(mat, 2, function(x) {
+      c(mean = mean(x), quantile(x, probs = probs))
+    })
+    
+    summaries = t(summaries)
+    
+    rownames(summaries) = paste0(param_list[i], "_", seq_len(ncol(mat)))
+    
+    out[[i]] = as.data.frame(summaries)
+  }
+  out_df = do.call(rbind, out)
+  out_df
+}
+
+retrieve_nu_sas_summ = function(Z_post, nu_post, start, end, nu_true = NULL){
+  binary_mat = Z_post[start:end,]
+  values_mat = nu_post[start:end,]
+  
+  masked_1 = values_mat * (binary_mat == 1)
+  masked_0 = values_mat * (binary_mat == 0)
+  count_1 = colSums(binary_mat == 1)
+  count_0 = colSums(binary_mat == 0)
+  
+  colSums(masked_1) / count_1
+  colSums(masked_0) / count_0
+  
+  N = ncol(values_mat)
+  medians = numeric(N)
+  q10 = numeric(N)
+  q90 = numeric(N)
+  
+  if (is.null(nu_true)){
+    nu_true = rep(NA_real_, N)
+  }
+  
+  # Loop through columns
+  for (i in 1:N) {
+    vals = values_mat[, i]
+    mask = binary_mat[, i] == 1
+    masked_vals = vals[mask]
+    
+    if (length(masked_vals) > 0) {
+      medians[i] = median(masked_vals)
+      q10[i]     = quantile(masked_vals, probs = 0.10, names = FALSE)
+      q90[i]    = quantile(masked_vals, probs = 0.90, names = FALSE)
+    } else {
+      medians[i] = NA
+      q10[i] = NA
+      q90[i] = NA
+    }
+  }
+  
+  
+  summary_df = data.frame(
+    q0.10 = q10,
+    q0.50 = medians,
+    q0.90 = q90
+  )
+  sas_df = t(round(cbind(p_z1 = count_1/(end-start), nu_true, summary_df), 4))
+  
+  return(sas_df)
+}
+
+
+thin_mcmc = function(MH_object, thin_by){
+  t = MH_object$iterations
+  
+  stopifnot(thin_by %% 1 == 0)
+  
+  MH_object$att_post = MH_object$att_post[seq(1, t, by = thin_by), ]
+  MH_object$def_post = MH_object$def_post[seq(1, t, by = thin_by), ]
+  MH_object$home_post = MH_object$home_post[seq(1, t, by = thin_by)]
+  MH_object$eta_post = MH_object$eta_post[seq(1, t, by = thin_by)]
+  
+  
+  if (MH_object$distr_type == 'CP-ID-SAS'){
+    MH_object$nu_post = MH_object$nu_post[seq(1, t, by = thin_by),]
+    MH_object$Z_post = MH_object$Z_post[seq(1, t, by = thin_by),]
+    MH_object$p_post = MH_object$p_post[seq(1, t, by = thin_by),]
+  }
+  
+  MH_object$iterations = t/thin_by
+  
+  return(MH_object)
+}
+
 ### Functions to generate matrices for mid-league inferences
 
 generate_X_mid = function(df_hist, n_games){
   # Generate a binary matrix for that holds 1 for the 'n_games' that have been played, 
   # taken in chronological order from df_hist.
   N = length(unique(df_hist[,"HomeTeam"]))
-  X_mid = matrix(0, N, N)
+  X_mid = matrix(0L, N, N)
   
   for(t in 1:n_games){
     hometeam = df_hist[t, "HomeTeam"]
@@ -439,6 +666,46 @@ generate_league_sim_cp = function(att, def, home, nu_home, nu_away,
   }
   return(list(X1_sim, X2_sim))
 }
+
+generate_league_sim_cp_d = function(att, def, home, nu, 
+                                    inv_X_mid = FALSE, X1 = FALSE, X2 = FALSE){
+  if(typeof(inv_X_mid) != 'double'){
+    X1_sim = matrix(NA, nrow = N, ncol = N)
+    X2_sim = matrix(NA, nrow = N, ncol = N)
+    for (i in 1:N){
+      for (j in 1:N){
+        if (i == j){next}
+        X1_sim[i,j] = rejection_sampler_draws(1, 
+                                              mu = exp(att[i] + def[j] + home),
+                                              nu = nu[i])
+        X2_sim[j,i] = rejection_sampler_draws(1, 
+                                              mu = exp(att[i] + def[j]),
+                                              nu = nu[i])
+      }
+    }
+  }
+  else{
+    stopifnot(typeof(X1) == "double" && typeof(X2) == "double")
+    print('not implemented!')
+    
+    
+    # X1_sim = X1
+    # X2_sim = X2
+    # for (i in 1:N){
+    #   for (j in 1:N){
+    #     if (inv_X_mid[i,j] == 0){next}
+    #     X1_sim[i,j] = rejection_sampler_draws(1, 
+    #                                           mu = exp(att[i] + def[j] + home),
+    #                                           nu = nu_home)
+    #     X2_sim[j,i] = rejection_sampler_draws(1, 
+    #                                           mu = exp(att[i] + def[j]),
+    #                                           nu = nu_away)
+    #   }
+    # }
+  }
+  return(list(X1_sim, X2_sim))
+}
+
 
 create_heatmatrix = function(home, away){
   df = data.frame(home,away)
@@ -594,8 +861,8 @@ evaluate_games_prob = function(MH_object_P, MH_object_CP, game_id, id_sample,
   predicted_probabilities_CP = c(home_prob, draw_prob, away_prob)
   
   df_bets_CP = setNames(data.frame(matrix(ncol = 11, nrow = 0)), 
-                       c("GameNumber","HomeTeam", "AwayTeam", "AvgQuote", "Bet", 
-                         "Result", "BetWin", "ImpliedProb","ModelProb","OurMargin","BookMargin"))
+                        c("GameNumber","HomeTeam", "AwayTeam", "AvgQuote", "Bet", 
+                          "Result", "BetWin", "ImpliedProb","ModelProb","OurMargin","BookMargin"))
   diff2 = predicted_probabilities_CP - implied_probability
   # idx_bets = which(book_margin+bet_margin < diff2)
   idx_bets = which((predicted_probabilities_CP/(1+book_margin)) - implied_probability > bet_margin)
@@ -614,6 +881,120 @@ evaluate_games_prob = function(MH_object_P, MH_object_CP, game_id, id_sample,
                   bets_P = df_bets_P,
                   bets_CP = df_bets_CP)
   return(out_list)
+}
+
+
+truncate_forecast = function(P, truncate_n = 2) {
+  n = nrow(P)
+  keep_n = n - truncate_n
+  
+  # Accumulate truncated rows and columns into last kept row/column
+  P[keep_n, 1:keep_n] = P[keep_n, 1:keep_n] + colSums(P[(keep_n+1):n, 1:keep_n])
+  P[1:keep_n, keep_n] = P[1:keep_n, keep_n] + rowSums(P[1:keep_n, (keep_n+1):n])
+  P[keep_n, keep_n] = P[keep_n, keep_n] + sum(P[(keep_n+1):n, (keep_n+1):n])
+  
+  # Return truncated matrix, normalized
+  # P[1:keep_n, 1:keep_n] / sum(P[1:keep_n, 1:keep_n])
+  return(P[1:keep_n, 1:keep_n])
+}
+
+safe_log = function(p, eps = 1e-15) {
+  p = pmax(p, eps)   
+  return(-log2(p))             
+}
+
+rotate_ccw = function(m) {
+  m[, ncol(m):1] |> t()
+}
+
+compute_goaldiff_probs = function(preds){
+  n = nrow(preds)
+  
+  # Initialize vector for goal difference probabilities
+  goal_diff_probs = numeric(2*n - 1)  # from +7 to -7 including 0
+  names(goal_diff_probs) =  (n-1): - (n-1)
+  
+  for (k in -(n-1):(n-1)) {
+    goal_diff_probs[as.character(k)] = sum(preds[row(preds) - col(preds) == -k])
+  }
+  
+  return(goal_diff_probs)
+}
+
+outcome_rps = function(probs, outcome) {
+  # probs: vector of length 3 with predicted probabilities
+  # outcome: observed outcome (1, 2, or 3)
+  
+  K = length(probs)
+  # Cumulative predicted probabilities
+  cum_probs = cumsum(probs)
+  
+  # Cumulative observed outcome vector
+  outcome_vec = rep(0, K)
+  outcome_vec[outcome] = 1
+  cum_obs = cumsum(outcome_vec)
+  
+  # Compute RPS
+  score = sum((cum_probs[-K] - cum_obs[-K])^2) / (K - 1)
+  return(score)
+}
+
+gd_rps = function(probs, cum_obs){
+  K = length(probs)
+  
+  cum_probs = cumsum(probs)
+  
+  score = sum((cum_probs[-K] - cum_obs[-K])^2) / (K - 1)
+  return(score)
+}
+
+ES_rps2d = function(P, ag_true, hg_true) {
+  # P: predicted probability matrix (rows=x, cols=y)
+  # x_true, y_true: true outcome coordinates (row, col)
+  
+  nrow_P = nrow(P)
+  ncol_P = ncol(P)
+  
+  # Observed outcome matrix
+  O = matrix(0, nrow=nrow_P, ncol=ncol_P)
+  O[ag_true, hg_true] = 1
+  
+  # Initialize cumulative matrices
+  F_cum = O_cum = matrix(0, nrow=nrow_P, ncol=ncol_P)
+  
+  for(i in 1:nrow_P) {
+    for(j in 1:ncol_P) {
+      F_cum[i,j] = sum(P[1:i, 1:j])
+      O_cum[i,j] = sum(O[1:i, 1:j])
+    }
+  }
+  
+  # 2D cumulative RPS score
+  score = sum((F_cum - O_cum)^2) / ((nrow_P - 1) * (ncol_P - 1))
+  
+  return(score)
+}
+
+# Manhattan-distance 2D score
+ES_rps2d_manhattan = function(P, ag_true, hg_true, exponent=2) {
+  # P: predicted probability matrix (rows=x, cols=y)
+  # x_true, y_true: true outcome coordinates (row, col)
+  # exponent: power applied to distance (default squared)
+  
+  nrow_P = nrow(P)
+  ncol_P = ncol(P)
+  
+  # Coordinates matrices
+  x_coords = matrix(rep(1:nrow_P, times=ncol_P), nrow=nrow_P)
+  y_coords = matrix(rep(1:ncol_P, each=nrow_P), nrow=nrow_P)
+  
+  # Manhattan distance from true outcome
+  manhattan_dist = abs(x_coords - ag_true) + abs(y_coords - hg_true)
+  
+  # Weighted score
+  score = sum(P * (manhattan_dist^exponent))
+  
+  return(score)
 }
 
 simulation_league_posterior = function(MH_object, id, distr_type){
@@ -706,6 +1087,44 @@ generate_ci_plot_comparison = function(X, MH_obj_P, MH_obj_CP, id_sample, text_m
   
   return(p)
 }
+
+plot_MCMC_diagnostics = function(MH_object_par, cols = 1:5, bins = 30) {
+  n = length(cols)
+  
+  # set up plotting layout (n rows, 2 columns)
+  par(mfrow = c(n, 2), mar = c(3, 3, 2, 1))
+  
+  for (i in cols) {
+    # trace plot
+    plot(MH_object_par[, i], type = "l", 
+         main = paste("Trace:", i), 
+         xlab = "Iteration", ylab = "Value")
+    
+    # histogram
+    hist(MH_object_par[, i], breaks = bins, col = "grey", border = "white",
+         main = paste("Histogram:", i), xlab = "Value")
+  }
+}
+
+plot_MCMC_diagnostics_series = function(par1, par2 , cols = 1:5) {
+  n = length(cols)
+  
+  # set up plotting layout (n rows, 2 columns)
+  par(mfrow = c(n, 2), mar = c(3, 3, 2, 1))
+  
+  for (i in cols) {
+    # trace plot
+    plot(par1[, i], type = "l", 
+         main = paste("Att:", i), 
+         xlab = "Iteration", ylab = "Value")
+    
+    plot(par2[, i], type = "l", 
+         main = paste("Nu:", i), 
+         xlab = "Iteration", ylab = "Value")
+    abline(h = 1, col = "red2", lty = "dashed", lwd = 1)
+  }
+}
+
 ### Functions to retrieve results from MH objects
 
 simulate_game_probs = function(MH_object_P, MH_object_CP, game_id, id_sample, df_hist, n_sims = 1,
@@ -754,7 +1173,7 @@ simulate_game_probs = function(MH_object_P, MH_object_CP, game_id, id_sample, df
 }
 
 simulate_game_probs_d = function(MH_object_P, MH_object_CP, MH_object_CPd, game_id, id_sample, df_hist, n_sims = 1,
-                               plot_heatmap_fl = FALSE){
+                                 plot_heatmap_fl = FALSE){
   
   hometeam = df_hist[game_id, "HomeTeam"]
   awayteam = df_hist[game_id, "AwayTeam"]
