@@ -38,8 +38,6 @@ read_data = function(season, league = 'Premier'){
       }
     }
   }
-  
-  
   rownames(X1)=rownames(Results)
   colnames(X1)=colnames(Results)
   rownames(X2)=rownames(Results)
