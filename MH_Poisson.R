@@ -36,7 +36,8 @@ MH_Pois = function(X1, X2, att_0, def_0, home_0, X_mid = FALSE, iter=100,
                        sd_prop_att = 1, att_mean_prior = 0, att_sd_prior = 1,
                        sd_prop_def = 1, def_mean_prior = -0, def_sd_prior = 1,
                        sd_prop_home = 1, home_mean_prior = 0, home_sd_prior = 1,
-                       verbosity = 0, print_by = 1000, fix_idx = NA){
+                       verbosity = 0, print_by = 1000, fix_idx = NA,
+                       league_acro = FALSE, season = FALSE){
   
   N = nrow(X1)
   
@@ -195,7 +196,8 @@ MH_Pois = function(X1, X2, att_0, def_0, home_0, X_mid = FALSE, iter=100,
                   team_names = rownames(X1),
                   distr_type = 'P',
                   constraint = 'STZ',
-                  league = league_acro)
+                  league = league_acro,
+                  season = season)
   class(out_list) = "MH_posterior"
   return(out_list)
 }

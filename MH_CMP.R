@@ -295,7 +295,8 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                       sd_prop_home = 1, home_mean_prior = 0, home_sd_prior = 1,
                       sd_prop_nu = 0.5, nu_lmean_prior = 0, nu_sd_prior = 1, rho = 0.5, 
                       p_alpha_prior = 1, p_beta_prior = 1, 
-                      verbosity = 0, print_by = 1000, fix_idx = NA){
+                      verbosity = 0, print_by = 1000, fix_idx = NA,
+                      league_acro = FALSE, season = FALSE){
   
   N = nrow(X1)
   
@@ -538,7 +539,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
       z1_mean = colMeans(Z_post[start_idx:end_idx, ])
       
       cat("\n=== Iteration", t, "(mean over last", print_by, "iterations) ===\n")
-      cat("home = %.3f\n", home_mean))
+      cat("home = %.3f\n", home_mean)
       cat("ATT:", paste(sprintf("%.3f", att_mean), collapse = " "), "\n")
       cat("DEF:", paste(sprintf("%.3f", def_mean), collapse = " "), "\n")
       cat("NU :", paste(sprintf("%.3f", nu_mean), collapse = " "), "\n")
@@ -580,7 +581,8 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                   team_names = rownames(X1),
                   distr_type = 'CMP-SAS',
                   constraint = 'STZ',
-                  league = league_acro)
+                  league = league_acro,
+                  season = season)
   class(out_list) = "MH_posterior"
   return(out_list)
 }
