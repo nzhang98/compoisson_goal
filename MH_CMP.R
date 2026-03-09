@@ -164,31 +164,6 @@ log_qf_cmp = function(x, mu, nu){
   return(nu * (x * log(mu) - lgamma(x + 1) ) )
 }
 
-#### Z lookup functions
-#########################################################################
-compute_Z = function(mu, nu, j_max = 1000, tol = 1e-20) {
-  Z = 0
-  for (j in 0:j_max) {
-    log_term = (nu * j) * log(mu) - nu * lfactorial(j)
-    term = exp(log_term)
-    if (is.nan(term) || term < tol) break
-    Z = Z + term
-  }
-  return(Z)
-}
-
-nearest_index = function(x, grid) {
-  idx = findInterval(x, grid)
-  idx[idx == 0] = 1
-  too_high = idx == length(grid)
-  idx[too_high] = length(grid)
-  
-  # adjust to whichever endpoint is closer
-  left  = grid[idx]
-  right = grid[pmin(idx + 1, length(grid))]
-  idx + (abs(right - x) < abs(left - x))
-}
-
 #### Aux data generation
 #########################################################################
 
@@ -288,12 +263,14 @@ generate_team_goals = function(team_i, N, att_vector, def_vector, nu_vector, X_m
   return(X_sim)
 }
 
+#### Main Algorithm
+######################
 
 MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALSE, iter=100, 
                       sd_prop_att = 1, att_mean_prior = 0, att_sd_prior = 1,
                       sd_prop_def = 1, def_mean_prior = 0, def_sd_prior = 1,
                       sd_prop_home = 1, home_mean_prior = 0, home_sd_prior = 1,
-                      sd_prop_nu = 0.5, nu_lmean_prior = 0, nu_sd_prior = 1, rho = 0.5, 
+                      sd_prop_eta = 1, eta_mean_prior = 0, eta_sd_prior = 1, rho = 0.5, 
                       p_alpha_prior = 1, p_beta_prior = 1, 
                       verbosity = 0, print_by = 1000, fix_idx = NA,
                       league_acro = FALSE, season = FALSE){
@@ -311,7 +288,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
   home_post = numeric(iter)
   nu_post = matrix(NA_real_, nrow = iter, ncol = N)
   nu_store_mat = matrix(NA_real_, nrow = iter, ncol = N)
-  nu_fix_mat = matrix(NA_real_, nrow = iter, ncol = N)
+  # nu_fix_mat = matrix(NA_real_, nrow = iter, ncol = N)
   Z_post = matrix(NA_real_, nrow = iter, ncol = N)
   p_post = matrix(NA_real_, nrow = iter, ncol = N)
   
@@ -332,13 +309,13 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
   Z_star = Z_0
   p_star = p_0
   
-  #Pre-comput (fixed) covariance matrix of the correlated att-nu update
-  Sigma = matrix(c(sd_prop_att^2, rho * sd_prop_att * sd_prop_nu,
-                   rho * sd_prop_att * sd_prop_nu, sd_prop_nu^2),
+  #Pre-comput (fixed) covariance matrix of the correlated att-nu(eta) update
+  Sigma = matrix(c(sd_prop_att^2, rho * sd_prop_att * sd_prop_eta,
+                   rho * sd_prop_att * sd_prop_eta, sd_prop_eta^2),
                  nrow = 2, 
                  byrow = TRUE
                  )
-  sd_phi_prop_fix = sqrt( (1 - rho**2) * sd_prop_nu**2 )
+  sd_eta_prop_fix = sqrt( (1 - rho**2) * sd_prop_eta**2 )
   
   #Acceptance history to compute rates
   acc_history = matrix(0, nrow = iter, ncol = 3)
@@ -380,29 +357,28 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
     
     #### Joint ATT and NU updates
     ########################################
-    
     for (i in base::setdiff(1:20, fix_idx)){ #iterate over i, except fixed team
       att_prop = att_star
       nu_prop = nu_store
-      phi_prop = log(nu_prop)
+      eta_prop = log(eta_prop)
       
       prop = MASS::mvrnorm(1,
-                           c(att_star[i], phi_prop[i]),
+                           c(att_star[i], eta_prop[i]),
                            Sigma,
       )
       att_prop[i] = prop[1]
-      phi_prop[i] = prop[2]
+      eta_prop[i] = prop[2]
       
       att_prop[fix_idx] = -sum(att_prop[-fix_idx])
       delta_att_prop = att_prop[fix_idx] - att_star[fix_idx]
       
-      mean_phi_prop_fix = phi_prop[fix_idx] + rho * (sd_prop_nu / sd_prop_att) * delta_att_prop
-      phi_prop[fix_idx] = rnorm(1, mean_phi_prop_fix, sd_phi_prop_fix)
+      mean_eta_prop_fix = eta_prop[fix_idx] + rho * (sd_prop_eta / sd_prop_att) * delta_att_prop
+      eta_prop[fix_idx] = rnorm(1, mean_eta_prop_fix, sd_eta_prop_fix)
       
-      nu_prop = exp(phi_prop)
+      nu_prop = exp(eta_prop)
       
       mask_nu_store = exp(Z_star * log(nu_store))
-      mask_nu_prop = exp(Z_star * phi_prop)
+      mask_nu_prop = exp(Z_star * eta_prop)
       
       block_idx = c(i, fix_idx)
       
@@ -410,15 +386,15 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
       aux_X2 = generate_block_goals(block_idx, N, att_prop, def_star, mask_nu_prop, X_mid, home_fl = FALSE)
       
       log_lik_prop = eval_log_qf_block(block_idx, X1, X2, att_prop, def_star, home_star, mask_nu_prop, X_mid)
-      log_prior_prop = sum(dlnorm(nu_prop[block_idx], nu_lmean_prior, nu_sd_prior, log = TRUE) + phi_prop[block_idx] ) +
-        sum(dnorm(att_prop[block_idx], att_mean_prior, def_sd_prior, log = TRUE))
+      log_prior_prop = sum(dnorm(nu_prop[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
+                       sum(dnorm(att_prop[i], att_mean_prior, att_sd_prior, log = TRUE))
       log_lik_prev_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_star, def_star, home_star, mask_nu_store, X_mid)
       
       numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
       
       log_lik_prev = eval_log_qf_block(block_idx, X1, X2, att_star, def_star, home_star, mask_nu_store, X_mid)
-      log_prior_prev = sum(dlnorm(nu_store[block_idx], nu_lmean_prior, nu_sd_prior, log = TRUE) + log(nu_store[block_idx]) ) +
-        sum(dnorm(att_star[block_idx], att_mean_prior, def_sd_prior, log = TRUE))
+      log_prior_prev = sum(dnorm(nu_store[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
+                       sum(dnorm(att_star[i], att_mean_prior, att_sd_prior, log = TRUE))
       log_lik_prop_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_prop, def_star, home_star, mask_nu_prop, X_mid)
       
       denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
@@ -431,7 +407,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
         nu_store[block_idx] = nu_prop[block_idx]
         nu_acc_history[t, i] = 1
       }
-      nu_fix_mat[t, i] = nu_store[fix_idx]
+      # nu_fix_mat[t, i] = nu_store[fix_idx]
     }
 
     att_post[t,] = att_star
@@ -558,7 +534,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                   home_post = home_post,
                   nu_post = nu_post,
                   nu_store = nu_store_mat,
-                  nu_fix_mat = nu_fix_mat,
+                  # nu_fix_mat = nu_fix_mat,
                   Z_post = Z_post,
                   p_post = p_post,
                   iterations = t,
@@ -566,14 +542,14 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                     att  = list(mean = att_mean_prior,  sd = att_sd_prior),
                     def  = list(mean = def_mean_prior,  sd = def_sd_prior),
                     home = list(mean = home_mean_prior, sd = home_sd_prior),
-                    nu   = list(mean = nu_lmean_prior,  sd = nu_sd_prior),
+                    nu   = list(mean = eta_mean_prior,  sd = eta_sd_prior),
                     p    = list(alpha= p_alpha_prior, beta = p_beta_prior)
                   ),
                   proposals = list(
                     att  = sd_prop_att,
                     def  = sd_prop_def,
                     home = sd_prop_home,
-                    nu   = sd_prop_nu
+                    nu   = sd_prop_eta
                   ),
                   fix_idx = fix_idx,
                   X = list(X1 = X1, X2 = X2),

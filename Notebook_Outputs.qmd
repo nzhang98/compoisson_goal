@@ -22,7 +22,9 @@ library('tidyverse')
 library('patchwork')
 library('matrixStats')
 ```
+
 #### SAS Prior Density
+
 ```{r}
 w_spike <- 0.3
 w_slab  <- 0.7
@@ -675,7 +677,6 @@ p = ggplot(plot_df, aes(x = season, y = value, color = series, group = series)) 
 
 ###### Dispersion
 
-
 ```{r}
 library(ggplot2)
 library(patchwork)
@@ -1195,6 +1196,7 @@ outcome = ftr_map[[ df_hist[game_id,'FTR'] ]]
 outcome_rps(cmp_prob/100, outcome)
 outcome_rps(pois_prob/100, outcome)
 ```
+
 ```{r}
 cmp_prob = c(sum(cmp_mat[upper.tri(cmp_mat)]),
              sum(diag(cmp_mat)),
@@ -2123,7 +2125,6 @@ for (s in unique(df_summary$season)) {
 
 ```
 
-
 ```{r}
 
 df_diff <- df_plot[1, ] - df_plot[2, ]
@@ -2246,7 +2247,7 @@ L_es_df[1:2,]
 rbind(L_outcome_df[1:2,], L_es_df[1:2,])
 
 ```
+
 ```{r}
 df_agg_filt1 = rbind(L_outcome_df[1:2,], L_es_df[1:2,])
 ```
-

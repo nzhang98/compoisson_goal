@@ -1,0 +1,320 @@
+---
+title: "Figures_Tables_Notebook"
+author: "Nick Zhang"
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+#### Imports
+
+```{r imports}
+source('utils.R') # Contains all utility functions to support modelling and analysis, including functions to import/export data, manipulate the MH_posterior objects from the MCMC routines, and generate predictions
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(matrixStats)
+library(knitr)
+library(kableExtra)
+library(ggridges)
+library(matrixStats)
+```
+
+### Application
+
+#### Figure 7
+
+```{r fig7 setup}
+# require(ggridges)
+league_acro = 'PL'
+season = '2324'
+n_run = 1
+load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ/Data/MH_Results/SAS_FullLeague/",league_acro,"_",season,"_Run",n_run,"_SAS_N_Final.RData"))
+MH_object = MH_SAS
+t = MH_object$iterations
+N = length(MH_object$team_names)
+
+nus = MH_object$nu_post[(t/5):t, ]
+nus[nus == 1] = NA
+
+quantiles = apply(nus, 2, function(x) quantile(x, probs = c(0.25, 0.75), na.rm = TRUE))
+
+classify = function(low, high) {
+  if (low > 1.1) {
+    return("Underdispersed")
+  } else if (high < 0.9) {
+    return("Overdispersed")
+  } else {
+    return("Equidispersed")
+  }
+}
+
+group_colors = c("Underdispersed" = "#D55E00", "Overdispersed" = "#009E73", "Equidispersed" = "gray")
+
+groups = mapply(classify, quantiles[1, ], quantiles[2, ])
+names(groups) =  MH_object$team_names
+
+p_z1 = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, (t/5)+1, t)[1,]
+names(p_z1) = MH_SAS$team_names
+
+groups[p_z1 < 0.49] = "Equidispersed"
+
+df_long = as.data.frame(nus)
+colnames(df_long) = MH_object$team_names
+
+df_long = df_long |>
+  pivot_longer(cols = everything(), names_to = "team", values_to = "value") |>
+  filter(!is.na(value)) |>
+  mutate(group = groups[team]) |>
+  mutate(log_value = log(value),
+         group = factor(group, levels = c("Underdispersed", "Equidispersed", "Overdispersed"))
+        )
+
+team_levels = levels(summary_df$team)
+p_z1 = p_z1[team_levels]
+
+df_z1 = data.frame(
+  team = factor(names(p_z1), levels = levels(summary_df$team)),
+  p_z1 = as.numeric(p_z1)
+)
+
+summary_df = df_long |>
+  group_by(team, group) |>
+  mutate(team = factor(team, levels = levels(summary_df$team))) |>
+  arrange(team)
+```
+
+```{r fig7 plot}
+p_a <- ggplot(summary_df, aes(
+  x = log_value,
+  y = factor(team, levels = unique(team)), # reverse to match histogram
+  fill = group
+)) +
+  geom_density_ridges(
+    scale = 1,             
+    rel_min_height = 0.01, 
+    alpha = 0.8,
+    color = "black"
+  ) +
+  scale_fill_manual(values = group_colors) +
+  scale_y_discrete(expand = c(0,0)) +   
+  coord_cartesian(clip = "off") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 10),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "(a)",
+    x = expression(log ~ P(nu[i] ~ "|" ~ Z[i] == 1, bold(Y))),
+    y = NULL
+  ) +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed", linewidth = 0.7)
+
+offset = 0
+p_b <- ggplot(df_z1, aes(
+  x = p_z1,
+  y = factor(team, levels = (unique(team)))  # match order of rows
+)) +
+  geom_col(fill = "skyblue3", width = 0.7,
+           position = position_nudge(y = -offset)) +   # shift bars down
+  geom_text(aes(label = sprintf("%.2f", p_z1)),
+            hjust = -0.1, size = 3.3,
+            position = position_nudge(y = -offset)) +  # shift text
+  annotate("segment", x = 0.49, xend = 0.49, y = 0.5, yend = 20.87,
+            color = "red3",
+            linetype = "dashed",
+            linewidth = 0.5
+          ) +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_discrete(expand = c(0,0)) +
+  coord_cartesian(clip = "off", ylim = c(1, 20.87)) +
+  labs(
+    title = "(b)",
+    x = expression(P(Z[i] == 1 ~ "|" ~ bold(Y))),
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(margin = margin(b = 2)),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+combined_fig7 = p_a + p_b
+
+ggsave(
+  "Plots/Figure7_SlabDensityZ.png",
+  plot = combined_fig7,
+  width = 1600,
+  height = 1200,
+  units = "px",
+  dpi = 300
+)
+```
+
+#### Figure 8
+
+```{r fig8 setup}
+require(matrixStats)
+
+league_acro = 'PL'
+season = '2324'
+n_run = 1
+
+load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ/Data/MH_Results/Pois_FullLeague/",league_acro,"_",season,"_Run",n_run,"_Pois",".RData"))
+MH_object_pois = MH_P
+t = MH_object_pois$iterations
+df_plot_pois = data.frame(att_means = colMedians(MH_object_pois$att_post[(t/5):t,]),
+                          def_means = colMedians(MH_object_pois$def_post[(t/5):t,]),
+                          label = MH_object_pois$team_names)
+
+load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ/Data/MH_Results/SAS_FullLeague/",league_acro,"_",season,"_Run",n_run,"_SAS_N_Final.RData"))
+MH_object_sas = MH_SAS
+t = MH_object_sas$iterations
+df_plot_sas = data.frame(att_means = colMedians(MH_object_sas$att_post[(t/5):t,]),
+                         def_means = colMedians(MH_object_sas$def_post[(t/5):t,]),
+                         label = MH_object_sas$team_names)
+
+team_names = MH_object_sas$team_names
+
+## TODO: Not do this manually
+df_colors <- data.frame(
+  name = team_names,
+  color = c(
+    "gray",  
+    "gray",
+    "gray",
+    "gray",
+    "#009E73",
+    "gray", 
+    "gray",  
+    "gray", 
+    "gray",
+    "#009E73",
+    "gray",
+    "gray",
+    "gray",
+    "gray",  
+    "gray",
+    "#D55E00",
+    "gray",  
+    "gray",  
+    "gray",  
+    "#009E73"  
+  )
+)
+df_plot_pois <- cbind(df_plot_pois, colors = df_colors$color)
+df_plot_sas <- cbind(df_plot_sas, colors = df_colors$color)
+```
+
+```{r fig8 plot}
+library(ggrepel)
+p_pois =  ggplot(df_plot_pois, aes(x = att_means, y = def_means, label = team_names)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 3, max.overlaps = 10) +
+  scale_color_identity() +
+  # scale_y_reverse() +
+  # theme(axis.text.x = element_text(size = 10), axis.title.x = element_text(size = 14, face = 'bold')) +
+  theme_minimal() + 
+  geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  coord_cartesian(xlim = c(-1.5, 1)) +
+  scale_y_continuous(limits = c(-1, 1)) +
+  ylab('') + xlab('') +
+  theme(plot.title = element_text(face = "bold")) +
+  ggtitle('Poisson Model')
+p_sas = ggplot(df_plot_sas, aes(x = att_means, y = def_means, label = team_names)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 3, max.overlaps = 10) +
+  scale_color_identity() +
+  # scale_y_reverse() +
+  # theme(axis.text.x = element_text(size = 10), axis.title.x = element_text(size = 14, face = 'bold')) +
+  theme_minimal() + 
+  geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  coord_cartesian(xlim = c(-1.5, 1)) +
+  scale_y_continuous(limits = c(-1, 1)) +
+  ylab('') + xlab('') +
+  theme(plot.title = element_text(face = "bold")) +
+  ggtitle('CMP-SAS Model')
+
+plots = list()
+plots[[1]] = p_pois
+plots[[2]] = p_sas
+
+combined_fig8 <- do.call(arrangeGrob, c(plots, nrow = 1, ncol = 2, left = "Mean DEF", bottom = "Mean ATT"))
+grid::grid.draw(combined_plot)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
