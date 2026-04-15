@@ -266,7 +266,8 @@ generate_team_goals = function(team_i, N, att_vector, def_vector, nu_vector, X_m
 #### Main Algorithm
 ######################
 
-MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALSE, iter=100, 
+MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+                      X_mid = FALSE, iter=100, 
                       sd_prop_att = 1, att_mean_prior = 0, att_sd_prior = 1,
                       sd_prop_def = 1, def_mean_prior = 0, def_sd_prior = 1,
                       sd_prop_home = 1, home_mean_prior = 0, home_sd_prior = 1,
@@ -286,30 +287,36 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
   att_post = matrix(NA_real_, nrow = iter, ncol = N)
   def_post = matrix(NA_real_, nrow = iter, ncol = N)
   home_post = numeric(iter)
+  eta_post = matrix(NA_real_, nrow = iter, ncol = N)
   nu_post = matrix(NA_real_, nrow = iter, ncol = N)
-  nu_store_mat = matrix(NA_real_, nrow = iter, ncol = N)
-  # nu_fix_mat = matrix(NA_real_, nrow = iter, ncol = N)
   Z_post = matrix(NA_real_, nrow = iter, ncol = N)
   p_post = matrix(NA_real_, nrow = iter, ncol = N)
-  
+
   att_post[1,] = att_0
   def_post[1,] = def_0
   home_post[1] = home_0
-  nu_post[1,] = nu_0
-  nu_store_mat[1,] = nu_0
+  eta_post[1,] = eta_0
+  nu_post[1,] = exp(Z_0 * nu_0)
   Z_post[1,] = Z_0
   p_post[1,] = p_0
   
-  #Star variables indicate currently "active" state of chain
-  att_star = att_0
-  def_star = def_0
-  home_star = home_0
-  nu_star = nu_0
+  # _curr variables indicate currently "active" state of chain
+  att_curr = att_0
+  def_curr = def_0
+  home_curr = home_0
+  eta_curr = eta_0
+  nu_curr = nu_0
   nu_store = nu_0
-  Z_star = Z_0
-  p_star = p_0
+  Z_curr = Z_0
+  p_curr = p_0
   
-  #Pre-comput (fixed) covariance matrix of the correlated att-nu(eta) update
+  # _prop variables indicate proposal states of chain
+  def_prop = def_curr
+  home_prop = home_curr
+  Z_prop = Z_curr
+  p_prop = p_curr
+  
+  #Pre-compute (fixed) covariance matrix of the correlated att-nu(eta) update
   Sigma = matrix(c(sd_prop_att^2, rho * sd_prop_att * sd_prop_eta,
                    rho * sd_prop_att * sd_prop_eta, sd_prop_eta^2),
                  nrow = 2, 
@@ -330,72 +337,87 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
     
     #### Z update
     ########################################
+    Z_prop = Z_curr
     for (i in 1:N){
+      Z_prop[i] = 1 - Z_curr[i] # Binary flip
+
+      #Z_prop[i] = rbinom(1, 1, p_star[i]) # Proposal sampling
+      # if (Z_prop[i] == Z_star[i]){next}
       
-      # Compute w0_i (Pois) and w1_i (CMP) weights
-      
-      pois_lhood = log(1-p_star[i]) + eval_pois_llhood_team(i, X1, X2, att_star, def_star, home_star, X_mid)
-      cmp_lhood = log(p_star[i]) + eval_cmp_llhood_team(i, X1, X2, att_star, def_star, home_star, nu_store, X_mid)
-      
-      p_z0 = plogis(pois_lhood - cmp_lhood)
-      
+      mask_nu_store = exp(Z_curr * eta_curr)
+      mask_nu_prop = exp(Z_prop * eta_curr)
+
+      aux_X1 = generate_team_goals(i, N, att_curr, def_curr, mask_nu_prop, X_mid, home_curr, home_fl = TRUE)
+      aux_X2 = generate_team_goals(i, N, att_curr, def_curr, mask_nu_prop, X_mid, home_fl = FALSE)
+
+      log_lik_prop = eval_log_qf_team(i, X1, X2, att_curr, def_curr, home_curr, mask_nu_prop, X_mid)
+      log_prior_prop = dbinom(Z_prop[i], 1, p_curr[i], log = TRUE)
+      log_lik_prev_aux = eval_log_qf_team(i, aux_X1, aux_X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
+
+      numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
+
+      log_lik_prev = eval_log_qf_team(i, X1, X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
+      log_prior_prev = dbinom(Z_curr[i], 1, p_curr[i], log = TRUE)
+      log_lik_prop_aux = eval_log_qf_team(i, aux_X1, aux_X2, att_curr, def_curr, home_curr, mask_nu_prop, X_mid)
+
+      denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
+
+      alpha = min(1, exp(numerator - denominator))
+
       u = fast_runif(1)
-      if (u <= p_z0) {Z_star[i] = 0} else {Z_star[i] = 1}
-      
+      if (u <= alpha){
+        Z_curr[i] = Z_prop[i]
+        # Z_acc_history[t, i] = 1
+      }
     }
-    # Force Z = 1 for all i for a fully-CMP model
-    # Z_star = rep(1, N)
-    Z_post[t,] = Z_star
+    # Z_curr = rep(1, N) #Force Z = 1 if CMP-Full
+    Z_post[t,] = Z_curr
     
     #### p update
     ########################################
     
     #Conjugate (block) update
-    p_star = rbeta(N, p_alpha_prior + Z_star, p_beta_prior + 1 - Z_star)
-    p_post[t,] = p_star
-    
+    p_curr = rbeta(N, p_alpha_prior + Z_curr, p_beta_prior + 1 - Z_curr)
+    p_post[t,] = p_curr
     
     #### Joint ATT and NU updates
     ########################################
     for (i in base::setdiff(1:20, fix_idx)){ #iterate over i, except fixed team
-      att_prop = att_star
-      nu_prop = nu_store
-      eta_prop = log(eta_prop)
+      att_prop = att_curr
+      eta_prop = eta_curr
       
       prop = MASS::mvrnorm(1,
-                           c(att_star[i], eta_prop[i]),
+                           c(att_curr[i], eta_curr[i]),
                            Sigma,
       )
       att_prop[i] = prop[1]
       eta_prop[i] = prop[2]
       
       att_prop[fix_idx] = -sum(att_prop[-fix_idx])
-      delta_att_prop = att_prop[fix_idx] - att_star[fix_idx]
+      delta_att_prop = att_prop[fix_idx] - att_curr[fix_idx]
       
       mean_eta_prop_fix = eta_prop[fix_idx] + rho * (sd_prop_eta / sd_prop_att) * delta_att_prop
       eta_prop[fix_idx] = rnorm(1, mean_eta_prop_fix, sd_eta_prop_fix)
       
-      nu_prop = exp(eta_prop)
-      
-      mask_nu_store = exp(Z_star * log(nu_store))
-      mask_nu_prop = exp(Z_star * eta_prop)
+      mask_nu_store = exp(Z_curr * eta_curr)
+      mask_nu_prop = exp(Z_curr * eta_prop)
       
       block_idx = c(i, fix_idx)
       
-      aux_X1 = generate_block_goals(block_idx, N, att_prop, def_star, mask_nu_prop, X_mid, home_star, home_fl = TRUE)
-      aux_X2 = generate_block_goals(block_idx, N, att_prop, def_star, mask_nu_prop, X_mid, home_fl = FALSE)
+      aux_X1 = generate_block_goals(block_idx, N, att_prop, def_curr, mask_nu_prop, X_mid, home_curr, home_fl = TRUE)
+      aux_X2 = generate_block_goals(block_idx, N, att_prop, def_curr, mask_nu_prop, X_mid, home_fl = FALSE)
       
-      log_lik_prop = eval_log_qf_block(block_idx, X1, X2, att_prop, def_star, home_star, mask_nu_prop, X_mid)
-      log_prior_prop = sum(dnorm(nu_prop[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
+      log_lik_prop = eval_log_qf_block(block_idx, X1, X2, att_prop, def_curr, home_curr, mask_nu_prop, X_mid)
+      log_prior_prop = sum(dnorm(eta_prop[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
                        sum(dnorm(att_prop[i], att_mean_prior, att_sd_prior, log = TRUE))
-      log_lik_prev_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_star, def_star, home_star, mask_nu_store, X_mid)
+      log_lik_prev_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
       
       numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
       
-      log_lik_prev = eval_log_qf_block(block_idx, X1, X2, att_star, def_star, home_star, mask_nu_store, X_mid)
-      log_prior_prev = sum(dnorm(nu_store[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
-                       sum(dnorm(att_star[i], att_mean_prior, att_sd_prior, log = TRUE))
-      log_lik_prop_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_prop, def_star, home_star, mask_nu_prop, X_mid)
+      log_lik_prev = eval_log_qf_block(block_idx, X1, X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
+      log_prior_prev = sum(dnorm(eta_curr[block_idx], eta_mean_prior, eta_sd_prior, log = TRUE)) +
+                       sum(dnorm(att_curr[i], att_mean_prior, att_sd_prior, log = TRUE))
+      log_lik_prop_aux = eval_log_qf_block(block_idx, aux_X1, aux_X2, att_prop, def_curr, home_curr, mask_nu_prop, X_mid)
       
       denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
       
@@ -403,21 +425,19 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
       
       u = fast_runif(1)
       if (u <= alpha){
-        att_star[block_idx] = att_prop[block_idx]
-        nu_store[block_idx] = nu_prop[block_idx]
+        att_curr[block_idx] = att_prop[block_idx]
+        eta_curr[block_idx] = eta_prop[block_idx]
         nu_acc_history[t, i] = 1
       }
-      # nu_fix_mat[t, i] = nu_store[fix_idx]
     }
 
-    att_post[t,] = att_star
-    nu_store_mat[t,] = nu_store
-    nu_post[t,] = exp(log(nu_store) * Z_star)
+    att_post[t,] = att_curr
+    nu_post[t,] = exp(eta_curr * Z_curr)
 
     #### Def update block
     #########################################################################
     
-    def_prop = def_star + rnorm(N, 0 , sd_prop_def)
+    def_prop = def_curr + rnorm(N, 0 , sd_prop_def)
     # 
     if (!is.na(fix_idx)){
       stopifnot(fix_idx %% 1 == 0 & fix_idx>= 0 & fix_idx<= N)
@@ -427,18 +447,18 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
       def_prop = def_prop - mean(def_prop)
     }
     
-    aux_X1 = generate_full_league(N, att_star, def_prop, nu_star, X_mid, home_star, home_fl = TRUE)
-    aux_X2 = generate_full_league(N, att_star, def_prop, nu_star, X_mid, home_fl = FALSE)
+    aux_X1 = generate_full_league(N, att_curr, def_prop, nu_curr, X_mid, home_curr, home_fl = TRUE)
+    aux_X2 = generate_full_league(N, att_curr, def_prop, nu_curr, X_mid, home_fl = FALSE)
     
-    log_lik_prop = eval_log_qf_homeaway(X1, X2, att_star, def_prop, home_star, nu_star, X_mid)
+    log_lik_prop = eval_log_qf_homeaway(X1, X2, att_curr, def_prop, home_curr, nu_curr, X_mid)
     log_prior_prop = sum(dnorm(def_prop, def_mean_prior, def_sd_prior, log = TRUE))
-    log_lik_prev_aux = eval_log_qf_homeaway(aux_X1, aux_X2, att_star, def_star, home_star, nu_star, X_mid)
+    log_lik_prev_aux = eval_log_qf_homeaway(aux_X1, aux_X2, att_curr, def_curr, home_curr, nu_curr, X_mid)
     
     numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
     
-    log_lik_prev = eval_log_qf_homeaway(X1, X2, att_star, def_star, home_star, nu_star, X_mid)
-    log_prior_prev = sum(dnorm(def_star, def_mean_prior, def_sd_prior, log = TRUE))
-    log_lik_prop_aux = eval_log_qf_homeaway(aux_X1, aux_X2, att_star, def_prop, home_star, nu_star, X_mid)
+    log_lik_prev = eval_log_qf_homeaway(X1, X2, att_curr, def_curr, home_curr, nu_curr, X_mid)
+    log_prior_prev = sum(dnorm(def_curr, def_mean_prior, def_sd_prior, log = TRUE))
+    log_lik_prop_aux = eval_log_qf_homeaway(aux_X1, aux_X2, att_curr, def_prop, home_curr, nu_curr, X_mid)
     
     denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
     
@@ -446,37 +466,37 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
     
     u = fast_runif(1)
     if (u <= alpha){
-      def_star = def_prop
+      def_curr = def_prop
       acc_history[t, "def"] = 1
     }
-    def_post[t,] = def_star
+    def_post[t,] = def_curr
     
     #### Home update block
     #########################################################################    
     
-    home_prop = rnorm(1, home_star, sd = sd_prop_home)
+    home_prop = rnorm(1, home_curr, sd = sd_prop_home)
     
-    aux_X1 = generate_full_league(N, att_star, def_star, nu_star, X_mid, home_prop, home_fl = TRUE)
+    aux_X1 = generate_full_league(N, att_curr, def_curr, nu_curr, X_mid, home_prop, home_fl = TRUE)
     
-    log_lik_prop = eval_log_qf_home(X1, att_star, def_star, home_prop, nu_star, X_mid)
+    log_lik_prop = eval_log_qf_home(X1, att_curr, def_curr, home_prop, nu_curr, X_mid)
     log_prior_prop = dnorm(home_prop, home_mean_prior, home_sd_prior, log = TRUE)
-    log_lik_prev_aux = eval_log_qf_home(aux_X1, att_star, def_star, home_star, nu_star, X_mid)
+    log_lik_prev_aux = eval_log_qf_home(aux_X1, att_curr, def_curr, home_curr, nu_curr, X_mid)
     
     numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
     
-    log_lik_prev = eval_log_qf_home(X1, att_star, def_star, home_star, nu_star, X_mid)
-    log_prior_prev = dnorm(home_star, home_mean_prior, home_sd_prior, log = TRUE)
-    log_lik_prop_aux = eval_log_qf_home(aux_X1, att_star, def_star, home_prop, nu_star, X_mid)
+    log_lik_prev = eval_log_qf_home(X1, att_curr, def_curr, home_curr, nu_curr, X_mid)
+    log_prior_prev = dnorm(home_curr, home_mean_prior, home_sd_prior, log = TRUE)
+    log_lik_prop_aux = eval_log_qf_home(aux_X1, att_curr, def_curr, home_prop, nu_curr, X_mid)
     
     denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
     
     alpha = min(1, exp(numerator - denominator))
     u = fast_runif(1)
     if (u <= alpha){
-      home_star = home_prop
+      home_curr = home_prop
       acc_history[t, "home"] = 1
     }
-    home_post[t] = home_star
+    home_post[t] = home_curr
     
     #Verbosity settings (additional comments / visuals during model fit, for debugging)
     if (verbosity >= 1 && t == 2) {pb = txtProgressBar(min = 0, max = iter, style = 3)}
@@ -533,8 +553,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                   def_post = def_post,
                   home_post = home_post,
                   nu_post = nu_post,
-                  nu_store = nu_store_mat,
-                  # nu_fix_mat = nu_fix_mat,
+                  eta_post = eta_post,
                   Z_post = Z_post,
                   p_post = p_post,
                   iterations = t,
@@ -542,14 +561,14 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, nu_0, X_mid = FALS
                     att  = list(mean = att_mean_prior,  sd = att_sd_prior),
                     def  = list(mean = def_mean_prior,  sd = def_sd_prior),
                     home = list(mean = home_mean_prior, sd = home_sd_prior),
-                    nu   = list(mean = eta_mean_prior,  sd = eta_sd_prior),
+                    eta   = list(mean = eta_mean_prior,  sd = eta_sd_prior),
                     p    = list(alpha= p_alpha_prior, beta = p_beta_prior)
                   ),
                   proposals = list(
                     att  = sd_prop_att,
                     def  = sd_prop_def,
                     home = sd_prop_home,
-                    nu   = sd_prop_eta
+                    eta   = sd_prop_eta
                   ),
                   fix_idx = fix_idx,
                   X = list(X1 = X1, X2 = X2),

@@ -58,9 +58,9 @@ for (L in 1){
       
       att_0 = rep(0, N)
       def_0 = rep(-0, N)
-      eta_0 = 0
+      eta_0 = rep(0, N)
       home_0 = 0
-      nu_0 = rep(1, N)
+      # nu_0 = rep(1, N)
       Z_0 = rep(1, N)
       p_0 = rep(0.5,N)
       print_freq = 1000
@@ -76,12 +76,19 @@ for (L in 1){
     
     for (n_run in 1){
       set.seed(n_run)
-      MH_SAS = MH_SAS_STZ(X1, X2, att_0, def_0, eta_0, home_0, Z_0, p_0, nu_0, X_mid, iter = iter,
-                          sd_prop_att, att_mean_prior, att_sd_prior, sd_prop_def, def_mean_prior, def_sd_prior,
-                          sd_prop_home, home_mean_prior, home_sd_prior, sd_prop_eta, eta_mean_prior, eta_sd_prior,
-                          sd_prop_eta, eta_mean_prior, eta_sd_prior, rho, p_alpha_prior, p_beta_prior, verbosity, 
-                          print_by = print_freq, fix_idx = fixed_i, league_acro = league_acro, season = season)
+      MH_SAS = MH_CMP_SAS(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+                          X_mid, iter,
+                          sd_prop_att, att_mean_prior, att_sd_prior, 
+                          sd_prop_def, def_mean_prior, def_sd_prior,
+                          sd_prop_home, home_mean_prior, home_sd_prior,
+                          sd_prop_eta, eta_mean_prior, eta_sd_prior, rho,
+                          p_alpha_prior, p_beta_prior, 
+                          verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
+                          league_acro = league_acro, season = season)
       # save(MH_SAS, file = paste0("Data//MH_Results//SAS_FullLeague//",league_acro,"_",season,"_Run",n_run,"_SAS_NewZ",".RData"))
     }
   }
 }
+
+colMeans(MH_SAS$Z_post[40000:50000,])
+MH_SAS$team_names
