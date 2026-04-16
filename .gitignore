@@ -8,6 +8,7 @@
 .Ruserdata
 
 # Generated outputs
+*.rds
 *.html
 *.pdf
 *.docx

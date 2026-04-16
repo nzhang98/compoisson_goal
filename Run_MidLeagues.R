@@ -5,11 +5,11 @@ start_year = 2023
 end_year = 2024
 seasons_strvec = generate_season_string(start_year, end_year)
 
-n_seeds = 1
+set.seed(1)
 
-league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL')
 
-leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes')
 
 for (L in 1){
   league = leagues[L]
@@ -67,14 +67,20 @@ for (L in 1){
       X_mid = matrix(1L, N, N)
       diag(X_mid) = 0L
       
-      iter = 50000
+      iter = 100
       
       fixed_i = N
-    } 
+    }
     
+    tot_games = nrow(df_hist)
+    if(tot_games == 380){games_seq = seq(190, 370, by = 10)}
+    if(tot_games == 306){games_seq = seq(153, 288, by = 9)}
     
-    for (n_run in 1){
-      set.seed(n_run)
+    # games_seq = c(190)
+    for (n_games in games_seq){
+      print(n_games)
+      X_mid = generate_X_mid(df_hist, n_games)
+      
       MH_SAS = MH_CMP_SAS(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
                           X_mid, iter,
                           sd_prop_att, att_mean_prior, att_sd_prior, 
@@ -84,39 +90,10 @@ for (L in 1){
                           p_alpha_prior, p_beta_prior, 
                           verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
                           league_acro = league_acro, season = season)
+      
+      saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_MidLeague/", league_acro, "_", season,"_n",n_games,"_SAS.rds"))
       # save(MH_SAS, file = paste0("Data//MH_Results//SAS_FullLeague//",league_acro,"_",season,"_Run",n_run,"_SAS_NewZ",".RData"))
+      # save(MH_SAS, file = paste0("Data//MH_Results//SAS_MidLeague//",league_acro,"_",season,"_n",n_games,"_SAS",".RData"))
     }
   }
 }
-
-# retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, 5000, 50000)
-# 
-# mcmc_out_dir = "Data/MCMC_Outputs/"
-# saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
-# colMeans(test$Z_post[5000:50000,])
-# MH_SAS$team_names
-# 
-# season = '2425'
-# test = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
-# retrieve_nu_sas_summ(test$Z_post, test$nu_post, 50000, 500000)
-# 
-# MH_object = test
-# 
-# MH_object$nu_post = MH_object$nu_post[seq(1, 250000, by = 5),]
-# MH_object$Z_post = MH_object$Z_post[seq(1, 250000, by = 5),]
-# MH_object$p_post = MH_object$p_post[seq(1, 250000, by = 5),]
-# 
-# # colMeans(test$Z_post[10000:200000,])
-# retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, 10000, 50000)
-
-
-
-
-
-
-
-
-
-
-
-

@@ -296,7 +296,7 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
   def_post[1,] = def_0
   home_post[1] = home_0
   eta_post[1,] = eta_0
-  nu_post[1,] = exp(Z_0 * nu_0)
+  nu_post[1,] = exp(Z_0 * eta_0)
   Z_post[1,] = Z_0
   p_post[1,] = p_0
   
@@ -305,8 +305,8 @@ MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
   def_curr = def_0
   home_curr = home_0
   eta_curr = eta_0
-  nu_curr = nu_0
-  nu_store = nu_0
+  nu_curr = exp(Z_0 * eta_0)
+  nu_store = exp(Z_0 * eta_0)
   Z_curr = Z_0
   p_curr = p_0
   
