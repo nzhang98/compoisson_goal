@@ -1,0 +1,583 @@
+---
+title: "Figures and Tables - Notebook"
+format: pdf
+editor: visual
+---
+
+## Notebook
+
+This notebook reproduces all figures and tables in the paper
+
+
+#### Preliminary
+
+```{r}
+source('utils.R') # Contains all utility functions to support modelling and analysis, including functions to import/export data, manipulate the MH_posterior objects from the MCMC routines, and generate predictions
+library(patchwork)
+```
+
+##### Figure 1
+
+```{r}
+
+X = read_data('2324', 'Premier')
+X1 = X[[1]]
+X2 = X[[2]]
+
+# Remove diagonals
+X1_nodiag = X1[upper.tri(X1) | lower.tri(X1)]
+X2_nodiag = X2[upper.tri(X2) | lower.tri(X2)]
+
+# Truncate values > 7
+X1_nodiag = X1_nodiag[X1_nodiag <= 7]
+X2_nodiag = X2_nodiag[X2_nodiag <= 7]
+
+# Convert to factors for exact bins 0 to 7
+X1_factor = factor(X1_nodiag, levels = 0:7)
+X2_factor = factor(X2_nodiag, levels = 0:7)
+
+# Calculate means for vertical lines
+mean_X1 = mean(as.numeric(as.character(X1_factor)))
+mean_X2 = mean(as.numeric(as.character(X2_factor)))
+var_X1 = var(as.numeric(as.character(X1_factor)))
+var_X2 = var(as.numeric(as.character(X2_factor)))
+
+# Create individual plots
+
+p1 = ggplot(data.frame(value = X1_factor), aes(x = value)) +
+  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
+  geom_vline(xintercept = mean_X1 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
+  geom_vline(xintercept = var_X1 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
+  scale_x_discrete(drop = FALSE) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Home Goals Scored", y = "Number of Matches") +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    plot.margin = margin(t = 5, r = 10, b = 5, l = 5)
+  )
+
+p2 = ggplot(data.frame(value = X2_factor), aes(x = value)) +
+  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
+  geom_vline(xintercept = mean_X2 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
+  geom_vline(xintercept = var_X2 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
+  scale_x_discrete(drop = FALSE) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Away Goals Scored", y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    plot.margin = margin(t = 5, r = 5, b = 5, l = 10)
+  )
+
+# Get max y-axis limit to sync y scales
+max_y = max(ggplot_build(p1)$data[[1]]$count, ggplot_build(p2)$data[[1]]$count)
+
+# Fix y-axis limits to be the same
+p1 = p1 + coord_cartesian(ylim = c(0, max_y))
+p2 = p2 + coord_cartesian(ylim = c(0, max_y))
+
+# Combine with patchwork, add space between plots
+combined_plot = p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1)) & 
+  theme(plot.margin = margin(10, 10, 10, 10)) 
+
+print(combined_plot)
+# H:800 W:350
+print(mean(X1_nodiag))
+print(mean(X2_nodiag))
+print(var(X1_nodiag))
+print(var(X2_nodiag))
+```
+
+##### Figure 2
+
+```{r}
+season = '2324'
+league_acro = 'PL'
+league = 'Premier'
+
+X = read_data(season, league)
+X1 = X[[1]]
+X2 = X[[2]]
+
+df_hist = read_historics(season, league_acro)
+team_names = sort(unique(df_hist[,"HomeTeam"]))
+N = length(team_names)
+rownames(X1) = team_names
+rownames(X2) = team_names
+team_codes = setNames(1:N, team_names)
+
+for (j in 1:N){
+  goals = unname(append(X1[j,],X2[,j]))
+  goals = goals[!is.na(goals)]
+  cat(team_names[j],mean(goals)/var(goals),'\n')
+}
+
+plots = list()
+for (j in 1:N){
+  # goals = unname(append(X1[j,],X2[,j]))
+  goals = unname(append(X1[j,],X2[,j]))
+  goals = goals[!is.na(goals)]
+  
+  if (mean(goals)/var(goals) > 1){disp_color = '#D55E00'}else{disp_color = '#009E73'}
+  
+  mean_goals = mean(goals)
+  var_goals = var(goals)
+  
+  p = ggplot(data.frame(goals), aes(x = goals)) +
+    coord_cartesian(xlim=c(0,7), ylim=c(0,15)) +
+    geom_histogram(binwidth = 1, fill = disp_color, color = 'black') +
+    geom_vline(xintercept = mean_goals, linetype = "solid", color = "#0072B2", linewidth = 0.8) +
+    geom_vline(xintercept = var_goals, linetype = "dashed", color = "#8E44AD", linewidth = 0.6) +
+    theme_minimal() +
+    theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+    ggtitle(paste(team_names[j]))
+  
+  plots[[j]] = p
+}
+
+do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
+```
+
+##### Figure 4
+
+```{r}
+compute_Z = function(mu, nu, j_max = 100) {
+  j = 0:j_max
+  terms = (mu^(nu * j)) / (factorial(j)^nu)
+  sum(terms)
+}
+
+get_index = function(value, grid) {
+  pmax(1, pmin(length(grid), round((value - grid[1]) / (grid[2] - grid[1])) + 1))
+}
+
+generate_cmp_contour_plot = function(x, mu_true, nu_true, 
+                                     mu_limit_lower = 0.01, mu_limit_upper = 3, mu_by = 0.01,
+                                     nu_limit_lower = 0.01, nu_limit_upper = 3, nu_by = 0.01){
+  mu_vals = seq(mu_limit_lower, mu_limit_upper, by = mu_by)
+  nu_vals = seq(nu_limit_lower, nu_limit_upper, by = nu_by)
+  
+  Z_lookup = outer(mu_vals, nu_vals, Vectorize(compute_Z))
+  LL = matrix(0, nrow = length(mu_vals), ncol = length(nu_vals))
+
+  x_sum = sum(lgamma(x + 1))
+  
+  for (i in seq_along(mu_vals)) {
+    mu = mu_vals[i]
+    
+    for (j in seq_along(nu_vals)) {
+      nu = nu_vals[j]
+      
+      i_idx = get_index(mu, mu_vals)
+      j_idx = get_index(nu, nu_vals)
+      
+      Z_val = Z_lookup[i_idx, j_idx]
+      
+      LL[i, j] =
+        nu * sum(x) * log(mu) - length(x) * log(Z_val) - nu * x_sum
+    }
+  }
+  
+  df = expand.grid(
+    mu = mu_interval,
+    nu = nu_interval
+  )
+  df$LL = as.vector(LL)
+
+  z_max = max(LL, na.rm = TRUE)
+  z_min = min(LL, na.rm = TRUE)
+  
+  levels_fine   = seq(z_max - (z_max - z_min)/20, z_max, length.out = 20)
+  levels_coarse = seq(z_min, z_max - (z_max - z_min)/10, length.out = 5)
+  levels = c(levels_coarse, levels_fine)
+  
+  # Colors (same length as levels)
+  my_colors = colorRampPalette(
+    c("lightyellow", "orange", "red", "darkred")
+  )(length(levels))
+  
+  p = ggplot(df, aes(mu, nu, z = LL)) +
+    geom_contour(
+      aes(colour = after_stat(level)),
+      breaks = levels,
+      linewidth = 0.4
+    ) +
+    xlim(floor(mu_limit_lower), mu_limit_upper) + 
+    scale_colour_gradientn(colours = my_colors, breaks = levels) +
+    geom_point(aes(x = mu_true, y = nu_true), color = "black", size = 2) +
+    labs(
+      x = expression(mu),
+      y = expression(nu),
+      colour = "LL"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+  
+  return(p)
+}
+
+x = rejection_sampler_draws(20000, 2, 0.5)
+p1 = generate_cmp_contour_plot(x, 2, 0.5)
+
+x = rejection_sampler_draws(20000, 1, 2)
+p2 = generate_cmp_contour_plot(x, 1, 2)
+
+p1+p2
+```
+
+##### Figure 6
+
+```{r}
+library(ggridges)
+library(forcats)
+league_acro = 'PL'
+season = '2324'
+MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+t = MH_object$iterations
+N = length(MH_object$team_names)
+
+nus = MH_object$nu_post[(t/10):t, ]
+nus[nus == 1] = NA
+
+quantiles <- apply(nus, 2, function(x) quantile(x, probs = c(0.1, 0.9), na.rm = TRUE))
+
+classify <- function(low, high) {
+  if (low > 1) {
+    return("Underdispersed")
+  } else if (high < 1) {
+    return("Overdispersed")
+  } else {
+    return("Equidispersed")
+  }
+}
+
+group_colors <- c("Underdispersed" = "#D55E00", "Overdispersed" = "#009E73", "Equidispersed" = "gray")
+
+groups <- mapply(classify, quantiles[1, ], quantiles[2, ])
+names(groups) <-  MH_object$team_names
+
+p_z1 = retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, (t/10)+1, t)[1,]
+names(p_z1) = MH_SAS$team_names
+
+groups[p_z1 <= 0.49] = "Equidispersed"
+
+df_long <- as.data.frame(nus)
+colnames(df_long) <- MH_object$team_names
+
+df_long <- df_long %>%
+  pivot_longer(cols = everything(), names_to = "team", values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  mutate(group = groups[team]) %>%
+  mutate(
+    log_value = log(value),
+    group = factor(group, levels = c("Underdispersed", "Equidispersed", "Overdispersed"))
+  )
+
+summary_df <- df_long %>%
+  group_by(team, group) %>%
+  summarise(
+    ymin = quantile(log(value), 0.10),
+    lower = quantile(log(value), 0.25),
+    middle = quantile(log(value), 0.5),
+    upper = quantile(log(value), 0.75),
+    ymax = quantile(log(value), 0.90),
+    .groups = "drop"
+  )
+
+summary_df <- summary_df %>%
+  left_join(summary_means, by = "team") %>%
+  mutate(team = fct_reorder(team, mean_val))
+
+team_levels <- levels(summary_df$team)
+p_z1 <- p_z1[team_levels]
+
+df_z1 <- data.frame(
+  team = factor(names(p_z1), levels = levels(summary_df$team)),
+  p_z1 = as.numeric(p_z1)
+)
+
+summary_df2 <- df_long %>%
+  group_by(team, group) %>%
+  mutate(team = factor(team, levels = levels(summary_df$team))) %>%
+  arrange(team)
+
+p2 <- ggplot(summary_df2, aes(
+  x = log_value,
+  y = factor(team, levels = unique(team)), # reverse to match histogram
+  fill = group
+)) +
+  geom_density_ridges(
+    scale = 1,             # reduce ridge height to fit rows
+    rel_min_height = 0.01, # minimum ridge height
+    alpha = 0.8,
+    color = "black",
+    size = 0.3
+  ) +
+  scale_fill_manual(values = group_colors) +
+  scale_y_discrete(expand = c(0,0)) +   # remove extra padding
+  # scale_x_continuous(limits = c(-3, 2.5)) + 
+  coord_cartesian(clip = "off") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 10),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "(a)",
+    x = expression(log ~ P(nu[i] ~ "|" ~ Z[i] == 1, bold(Y))),
+    y = NULL
+  ) +
+  geom_vline(xintercept = 0, color = "blue", linetype = "dashed", linewidth = 0.7)
+
+offset = 0
+p3 <- ggplot(df_z1, aes(
+  x = p_z1,
+  y = factor(team, levels = (unique(team)))  # match order of rows
+)) +
+  geom_col(fill = "skyblue3", width = 0.7,
+           position = position_nudge(y = -offset)) +   # shift bars down
+  geom_text(aes(label = sprintf("%.2f", p_z1)),
+            hjust = -0.1, size = 3.3,
+            position = position_nudge(y = -offset)) +  # shift text too
+  geom_segment(
+    aes(x = 0.5, xend = 0.5, y = 0.5, yend = 20.87),  # set y range manually
+    color = "red3",
+    linetype = "dashed",
+    linewidth = 0.5
+  ) +
+  scale_x_continuous(limits = c(0, 1)) +
+  scale_y_discrete(expand = c(0,0)) +   # remove padding
+  coord_cartesian(clip = "off", ylim = c(1, 20.87)) +
+  labs(
+    title = "(b)",
+    x = expression(P(Z[i] == 1 ~ "|" ~ bold(Y))),
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(margin = margin(b = 2)),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+p2+p3
+
+```
+
+##### Figure 7
+##### Att and Mean scatter plot comparison
+
+```{r}
+# library(matrixStats)
+
+league_acro = 'PL'
+season = '2324'
+
+load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run",n_run,"_Pois",".RData"))
+
+t = MH_object_pois$iterations
+df_plot = data.frame(att_means = colMeans(MH_object_pois$att_post[(t/5):t,]),
+                     def_means = colMeans(MH_object_pois$def_post[(t/5):t,]),
+                     label = MH_object_pois$team_names)
+
+MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+
+t = MH_object$iterations
+df_plot2 = data.frame(att_means = colMeans(MH_object$att_post[(t/5):t,]),
+                      def_means = colMeans(MH_object$def_post[(t/5):t,]),
+                      label = MH_object$team_names)
+
+team_names = MH_object$team_names
+
+df_colors <- data.frame(
+  name = team_names,
+  color = c(
+    "gray",  
+    "gray",
+    "gray",
+    "gray",
+    "#009E73",
+    "gray",  
+    "gray",  
+    "gray",  
+    "gray",
+    "#009E73",
+    "gray",
+    "gray",
+    "gray",
+    "gray", 
+    "gray",
+    "#D55E00",
+    "gray", 
+    "gray", 
+    "gray", 
+    "#009E73"  
+  )
+)
+df_plot <- cbind(df_plot, colors = df_colors$color)
+df_plot2 <- cbind(df_plot2, colors = df_colors$color)
+
+library(ggrepel)
+p1 =  ggplot(df_plot, aes(x = att_means, y = def_means, label = team_names)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+  scale_color_identity() +
+  scale_y_reverse() +
+  theme_minimal() + 
+  geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  coord_cartesian(xlim = c(-2, 0.8)) +
+  scale_y_continuous(limits = c(-1, 0.8)) + 
+  ylab('') + xlab('') +
+  theme(plot.title = element_text(face = "bold")) +
+  ggtitle('Poisson Model')
+p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = team_names)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+  scale_color_identity() +
+  scale_y_reverse() +
+  theme_minimal() + 
+  geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
+  coord_cartesian(xlim = c(-2, 0.8)) +
+  scale_y_continuous(limits = c(-1, 0.8)) +
+  ylab('') + xlab('') +
+  theme(plot.title = element_text(face = "bold")) +
+  ggtitle('CMP-SAS Model')
+
+plots = list()
+plots[[1]] = p1
+plots[[2]] = p2
+
+
+do.call("grid.arrange", c(plots, nrow = 1, ncol = 2, left = 'Mean DEF', bottom = 'Mean ATT'))
+```
+##### Table 3
+
+```{r}
+library(kableExtra)
+league_acro = 'PL'
+season = '2324'
+
+load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run",n_run,"_Pois",".RData"))
+
+t = MH_P$iterations
+pois_pars = retrieve_pars_summ(MH_P, burn_in = 0.2)[,1]
+names(pois_pars) = rownames(retrieve_pars_summ(MH_P))
+pois_pars
+
+MH_SAS = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+
+sas_pars = retrieve_pars_summ(MH_SAS, burn_in = 0.2)[,1]
+names(sas_pars) = rownames(retrieve_pars_summ(MH_SAS))
+
+df_table = cbind(pois_pars[2:21],
+                 pois_pars[22:41],
+                 sas_pars[2:21],
+                 sas_pars[22:41],
+                 (sas_pars[42:61]),
+                 retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, (t/5), t)[1,])
+
+df_sd = cbind(apply(MH_P$att_post[(t/5):t,], 2, sd),
+              apply(MH_P$def_post[(t/5):t,], 2, sd),
+              apply(MH_SAS$att_post[(t/5):t,], 2, sd),
+              apply(MH_SAS$def_post[(t/5):t,], 2, sd),
+              apply((MH_SAS$nu_post[(t/5):t,]), 2, sd))
+df_sd = round(df_sd[order(-df_table[,5]),],3)
+
+rownames(df_table) = MH_SAS$team_names
+
+df_table = cbind(round(df_table[,1:5], 3),
+      round(df_table[,6], 2))
+
+df_sort = df_table[order(-df_table[,5]),]
+
+df_latex <- df_sort %>%
+  as.data.frame()
+
+for (j in 1:5) {
+  df_latex[[j]] <- sprintf(
+    "%.3f (%.3f)",
+    df_latex[[j]],
+    df_sd[, j]
+  )
+}
+
+rn <- rownames(df_latex)
+rownames(df_latex) <- paste0("\\textit{", rn, "}")
+
+# ---- 3. LaTeX table ----
+table3 = kable(
+  df_latex,
+  format = "latex",
+  booktabs = TRUE,                        # cleaner table, no row-by-row hlines
+  align = c("l", rep("S", ncol(df_latex) - 1)),# row name column is left-aligned
+  escape = FALSE                          # allow italic row names
+)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

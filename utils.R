@@ -530,7 +530,13 @@ thin_mcmc = function(MH_object, thin_by){
   MH_object$eta_post = MH_object$eta_post[seq(1, t, by = thin_by)]
   
   
-  if (MH_object$distr_type == 'CP-ID-SAS'){
+  if (MH_object$distr_type == 'CMP-SAS'){
+    MH_object$nu_post = MH_object$nu_post[seq(1, t, by = thin_by),]
+    MH_object$Z_post = MH_object$Z_post[seq(1, t, by = thin_by),]
+    MH_object$p_post = MH_object$p_post[seq(1, t, by = thin_by),]
+  }
+  
+  if (MH_object$distr_type == 'CMP-Full'){
     MH_object$nu_post = MH_object$nu_post[seq(1, t, by = thin_by),]
     MH_object$Z_post = MH_object$Z_post[seq(1, t, by = thin_by),]
     MH_object$p_post = MH_object$p_post[seq(1, t, by = thin_by),]

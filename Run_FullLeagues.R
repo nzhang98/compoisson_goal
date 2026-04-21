@@ -91,14 +91,14 @@ for (L in 1){
 
 # retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, 5000, 50000)
 # 
-# mcmc_out_dir = "Data/MCMC_Outputs/"
-# saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+mcmc_out_dir = "Data/MCMC_Outputs/"
+saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
 # colMeans(test$Z_post[5000:50000,])
 # MH_SAS$team_names
 # 
-# season = '2425'
-# test = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
-# retrieve_nu_sas_summ(test$Z_post, test$nu_post, 50000, 500000)
+season = '2223'
+test = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+retrieve_nu_sas_summ(test$Z_post, test$nu_post, 5000, 100000)
 # 
 # MH_object = test
 # 
@@ -110,6 +110,9 @@ for (L in 1){
 # retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, 10000, 50000)
 
 
+MH_SAS = r
+
+saveRDS(MH_SAS, paste0(mcmc_out_dir, "Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))  
 
 
 

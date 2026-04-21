@@ -266,7 +266,7 @@ generate_team_goals = function(team_i, N, att_vector, def_vector, nu_vector, X_m
 #### Main Algorithm
 ######################
 
-MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+MH_CMP_Full = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
                       X_mid = FALSE, iter=100, 
                       sd_prop_att = 1, att_mean_prior = 0, att_sd_prior = 1,
                       sd_prop_def = 1, def_mean_prior = 0, def_sd_prior = 1,
@@ -337,40 +337,8 @@ MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
     
     #### Z update
     ########################################
-    Z_prop = Z_curr
-    for (i in 1:N){
-      Z_prop[i] = 1 - Z_curr[i] # Binary flip
 
-      #Z_prop[i] = rbinom(1, 1, p_star[i]) # Proposal sampling
-      # if (Z_prop[i] == Z_star[i]){next}
-      
-      mask_nu_store = exp(Z_curr * eta_curr)
-      mask_nu_prop = exp(Z_prop * eta_curr)
-
-      aux_X1 = generate_team_goals(i, N, att_curr, def_curr, mask_nu_prop, X_mid, home_curr, home_fl = TRUE)
-      aux_X2 = generate_team_goals(i, N, att_curr, def_curr, mask_nu_prop, X_mid, home_fl = FALSE)
-
-      log_lik_prop = eval_log_qf_team(i, X1, X2, att_curr, def_curr, home_curr, mask_nu_prop, X_mid)
-      log_prior_prop = dbinom(Z_prop[i], 1, p_curr[i], log = TRUE)
-      log_lik_prev_aux = eval_log_qf_team(i, aux_X1, aux_X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
-
-      numerator = log_lik_prop + log_prior_prop + log_lik_prev_aux
-
-      log_lik_prev = eval_log_qf_team(i, X1, X2, att_curr, def_curr, home_curr, mask_nu_store, X_mid)
-      log_prior_prev = dbinom(Z_curr[i], 1, p_curr[i], log = TRUE)
-      log_lik_prop_aux = eval_log_qf_team(i, aux_X1, aux_X2, att_curr, def_curr, home_curr, mask_nu_prop, X_mid)
-
-      denominator = log_lik_prev + log_prior_prev + log_lik_prop_aux
-
-      alpha = min(1, exp(numerator - denominator))
-
-      u = fast_runif(1)
-      if (u <= alpha){
-        Z_curr[i] = Z_prop[i]
-        # Z_acc_history[t, i] = 1
-      }
-    }
-    # Z_curr = rep(1, N) #Force Z = 1 if CMP-Full
+    Z_curr = rep(1, N) #Force Z = 1 if CMP-Full
     Z_post[t,] = Z_curr
     
     #### p update
@@ -499,13 +467,7 @@ MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
     }
     home_post[t] = home_curr
     
-    #Verbosity settings (additional comments / visuals during model fit, for debugging)
-    if (verbosity >= 1 && t == 2) {pb = txtProgressBar(min = 0, max = iter, style = 3)}
-    
-    if (verbosity >= 1) {
-      setTxtProgressBar(pb, t)
-      if (t == iter) {close(pb)}
-    }
+    #Verbosity settings (additional comments / visuals during model fit, for debugging)    
     
     if (verbosity >= 2 && t %% print_by == 0) {
       start_idx = max(1, t - print_by - 1)
@@ -543,7 +505,7 @@ MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
       cat("Z1 :", paste(sprintf("%.3f", z1_mean), collapse = " "), "\n")
       c = c + 1
       if (c == 5){c = 1}
-      plot_MCMC_diagnostics_series(att_post[1:t,], nu_post[1:t,], ((c-1)*5+1):((c)*5))
+      #plot_MCMC_diagnostics_series(att_post[1:t,], nu_post[1:t,], ((c-1)*5+1):((c)*5))
     }
     
   }
@@ -575,7 +537,7 @@ MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0,
                   X = list(X1 = X1, X2 = X2),
                   X_mid = X_mid,
                   team_names = rownames(X1),
-                  distr_type = 'CMP-SAS',
+                  distr_type = 'CMP-Full',
                   constraint = 'STZ',
                   league = league_acro,
                   season = season)
