@@ -1,8 +1,5 @@
----
-title: "Figures and Tables - Notebook"
-format: gfm
-editor: visual
----
+# Figures and Tables - Notebook
+
 
 ## Notebook
 
@@ -10,16 +7,44 @@ This notebook reproduces all figures and tables in the paper
 
 #### Preliminary
 
-```{r load}
+``` r
 source('utils.R') # Contains all utility functions to support modelling and analysis, including functions to import/export data, manipulate the MH_posterior objects from the MCMC routines, and generate predictions
+```
+
+    Warning: package 'purrr' was built under R version 4.3.3
+
+
+    Attaching package: 'dplyr'
+
+    The following object is masked from 'package:gridExtra':
+
+        combine
+
+    The following objects are masked from 'package:stats':
+
+        filter, lag
+
+    The following objects are masked from 'package:base':
+
+        intersect, setdiff, setequal, union
+
+    Warning: package 'tidyr' was built under R version 4.3.3
+
+
+    Attaching package: 'tidyr'
+
+    The following object is masked from 'package:reshape2':
+
+        smiths
+
+``` r
 library(patchwork)
 mcmc_out_dir = "Data/MCMC_Outputs/"
 ```
 
 ##### Figure 1
 
-```{r fig1}
-
+``` r
 X = read_data('2324', 'Premier')
 X1 = X[[1]]
 X2 = X[[2]]
@@ -89,9 +114,11 @@ combined_plot = p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1)) &
 print(combined_plot)
 ```
 
+![](Notebook_Figures_Tables_files/figure-commonmark/fig1-1.png)
+
 ##### Figure 2
 
-```{r fig2}
+``` r
 season = '2324'
 league_acro = 'PL'
 league = 'Premier'
@@ -132,9 +159,11 @@ for (j in 1:N){
 do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
 ```
 
+![](Notebook_Figures_Tables_files/figure-commonmark/fig2-1.png)
+
 ##### Figure 4
 
-```{r fig4}
+``` r
 compute_Z = function(mu, nu, j_max = 100) {
   j = 0:j_max
   terms = (mu^(nu * j)) / (factorial(j)^nu)
@@ -219,11 +248,18 @@ p2 = generate_cmp_contour_plot(x, 1, 2)
 p1+p2
 ```
 
+![](Notebook_Figures_Tables_files/figure-commonmark/fig4-1.png)
+
 ##### Figure 6
 
-```{r fig6}
+``` r
 library(ggridges)
 library(forcats)
+```
+
+    Warning: package 'forcats' was built under R version 4.3.3
+
+``` r
 league_acro = 'PL'
 season = '2324'
 MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
@@ -328,7 +364,12 @@ p2 = ggplot(summary_df2, aes(
     y = NULL
   ) +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed", linewidth = 0.7)
+```
 
+    Warning in geom_density_ridges(scale = 1, rel_min_height = 0.01, alpha = 0.8, :
+    Ignoring unknown parameters: `size`
+
+``` r
 offset = 0
 p3 = ggplot(df_z1, aes(
   x = p_z1,
@@ -364,14 +405,21 @@ p3 = ggplot(df_z1, aes(
   )
 
 p2+p3
-
 ```
+
+    Picking joint bandwidth of 0.049
+
+    Warning in geom_segment(aes(x = 0.5, xend = 0.5, y = 0.5, yend = 20.87), : All aesthetics have length 1, but the data has 20 rows.
+    ℹ Please consider using `annotate()` or provide this layer with data containing
+      a single row.
+
+![](Notebook_Figures_Tables_files/figure-commonmark/fig6-1.png)
 
 ##### Figure 7
 
 ##### Att and Mean scatter plot comparison
 
-```{r fig7}
+``` r
 # library(matrixStats)
 
 league_acro = 'PL'
@@ -422,6 +470,11 @@ df_plot = cbind(df_plot, colors = df_colors$color)
 df_plot2 = cbind(df_plot2, colors = df_colors$color)
 
 library(ggrepel)
+```
+
+    Warning: package 'ggrepel' was built under R version 4.3.3
+
+``` r
 p1 =  ggplot(df_plot, aes(x = att_means, y = def_means, label = team_names)) +
   geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
@@ -434,6 +487,12 @@ p1 =  ggplot(df_plot, aes(x = att_means, y = def_means, label = team_names)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('Poisson Model')
+```
+
+    Scale for y is already present.
+    Adding another scale for y, which will replace the existing scale.
+
+``` r
 p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = team_names)) +
   geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
@@ -446,7 +505,12 @@ p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = team_names)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('CMP-SAS Model')
+```
 
+    Scale for y is already present.
+    Adding another scale for y, which will replace the existing scale.
+
+``` r
 plots = list()
 plots[[1]] = p1
 plots[[2]] = p2
@@ -455,10 +519,28 @@ plots[[2]] = p2
 do.call("grid.arrange", c(plots, nrow = 1, ncol = 2, left = 'Mean DEF', bottom = 'Mean ATT'))
 ```
 
+    Warning: ggrepel: 10 unlabeled data points (too many overlaps). Consider
+    increasing max.overlaps
+
+    Warning: ggrepel: 7 unlabeled data points (too many overlaps). Consider
+    increasing max.overlaps
+
+![](Notebook_Figures_Tables_files/figure-commonmark/fig7-1.png)
+
 ##### Table 3
 
-```{r tab3}
+``` r
 library(kableExtra)
+```
+
+
+    Attaching package: 'kableExtra'
+
+    The following object is masked from 'package:dplyr':
+
+        group_rows
+
+``` r
 league_acro = 'PL'
 season = '2324'
 
@@ -518,5 +600,35 @@ table3 = kable(
 )
 
 print(table3)
-
 ```
+
+
+    \begin{tabular}{llSSSSS}
+    \toprule
+      & V1 & V2 & V3 & V4 & V5 & V6\\
+    \midrule
+    \textit{Nott'm Forest} & -0.221 (0.150) & 0.116 (0.125) & 0.054 (0.202) & 0.121 (0.126) & 1.395 (0.570) & 0.53\\
+    \textit{Liverpool} & 0.391 (0.112) & -0.419 (0.167) & 0.559 (0.124) & -0.399 (0.164) & 1.261 (0.419) & 0.45\\
+    \textit{Bournemouth} & -0.113 (0.145) & 0.124 (0.126) & 0.116 (0.170) & 0.121 (0.129) & 1.241 (0.448) & 0.45\\
+    \textit{Brentford} & -0.064 (0.139) & 0.092 (0.129) & 0.110 (0.177) & 0.084 (0.125) & 1.059 (0.261) & 0.31\\
+    \textit{Burnley} & -0.433 (0.165) & 0.279 (0.118) & -0.237 (0.398) & 0.273 (0.116) & 1.025 (0.292) & 0.34\\
+    \addlinespace
+    \textit{Man City} & 0.500 (0.104) & -0.643 (0.183) & 0.624 (0.125) & -0.607 (0.175) & 1.005 (0.161) & 0.24\\
+    \textit{Luton} & -0.136 (0.146) & 0.388 (0.112) & 0.025 (0.181) & 0.375 (0.110) & 0.999 (0.205) & 0.29\\
+    \textit{Newcastle} & 0.396 (0.111) & 0.065 (0.132) & 0.522 (0.142) & 0.068 (0.127) & 0.986 (0.158) & 0.25\\
+    \textit{Aston Villa} & 0.269 (0.118) & 0.039 (0.134) & 0.393 (0.156) & 0.037 (0.128) & 0.985 (0.165) & 0.26\\
+    \textit{Crystal Palace} & -0.053 (0.140) & -0.034 (0.135) & 0.089 (0.196) & -0.033 (0.132) & 0.973 (0.184) & 0.28\\
+    \addlinespace
+    \textit{Man United} & -0.049 (0.141) & -0.036 (0.135) & 0.059 (0.198) & -0.037 (0.135) & 0.968 (0.190) & 0.28\\
+    \textit{West Ham} & 0.020 (0.135) & 0.244 (0.121) & 0.132 (0.228) & 0.232 (0.117) & 0.963 (0.194) & 0.28\\
+    \textit{Arsenal} & 0.440 (0.109) & -0.854 (0.204) & 0.549 (0.143) & -0.793 (0.202) & 0.962 (0.156) & 0.26\\
+    \textit{Everton} & -0.477 (0.165) & -0.202 (0.147) & -0.343 (0.612) & -0.196 (0.140) & 0.958 (0.278) & 0.35\\
+    \textit{Tottenham} & 0.242 (0.120) & 0.039 (0.131) & 0.333 (0.199) & 0.031 (0.135) & 0.952 (0.187) & 0.29\\
+    \addlinespace
+    \textit{Sheffield United} & -0.603 (0.178) & 0.588 (0.102) & -0.606 (0.566) & 0.568 (0.100) & 0.919 (0.301) & 0.37\\
+    \textit{Chelsea} & 0.289 (0.118) & 0.075 (0.132) & 0.252 (0.417) & 0.070 (0.128) & 0.819 (0.263) & 0.44\\
+    \textit{Wolves} & -0.202 (0.147) & 0.088 (0.130) & -0.475 (0.798) & 0.074 (0.127) & 0.766 (0.301) & 0.50\\
+    \textit{Brighton} & -0.097 (0.139) & 0.035 (0.129) & -0.325 (0.472) & 0.028 (0.132) & 0.729 (0.281) & 0.54\\
+    \textit{Fulham} & -0.098 (0.141) & 0.014 (0.134) & -1.831 (1.615) & -0.018 (0.130) & 0.323 (0.216) & 0.96\\
+    \bottomrule
+    \end{tabular}
