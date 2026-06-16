@@ -1,16 +1,17 @@
 source('utils.R')
-source('MH_CMP.R')
+source('MH_Poisson.R')
+source('MH_CMP_SAS.R')
+source('MH_CMP_Full.R')
 
-start_year = 2023
-end_year = 2024
+start_year = 2020
+end_year = 2025
 seasons_strvec = generate_season_string(start_year, end_year)
 
-n_seeds = 1
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL')
 
-league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes')
 
-leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
-
+# E.g. L = 1, Premier League
 for (L in 1){
   league = leagues[L]
   league_acro = league_acros[L]
@@ -34,6 +35,8 @@ for (L in 1){
     
     { 
       verbosity = 3
+      
+      mcmc_out_dir = "Data/MCMC_Outputs/"
       
       sd_prop_att = 0.1
       att_mean_prior = 0
@@ -62,61 +65,64 @@ for (L in 1){
       home_0 = 0
       Z_0 = rep(1, N)
       p_0 = rep(0.5,N)
-      print_freq = 1000
+      print_freq = 10000
       
-      X_mid = matrix(1L, N, N)
+      X_mid = matrix(1L, N, N) #Fail safe
       diag(X_mid) = 0L
       
-      iter = 50000
+      iter = 250000
       
-      fixed_i = N
+      fixed_i = N #Use the last team as the fixed anchor team for the att and def parameters
     } 
+
+    set.seed(1)
     
+    ### Poisson Model
     
-    for (n_run in 1){
-      set.seed(n_run)
-      MH_SAS = MH_CMP_SAS(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
-                          X_mid, iter,
-                          sd_prop_att, att_mean_prior, att_sd_prior, 
-                          sd_prop_def, def_mean_prior, def_sd_prior,
-                          sd_prop_home, home_mean_prior, home_sd_prior,
-                          sd_prop_eta, eta_mean_prior, eta_sd_prior, rho,
-                          p_alpha_prior, p_beta_prior, 
-                          verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
-                          league_acro = league_acro, season = season)
-      # save(MH_SAS, file = paste0("Data//MH_Results//SAS_FullLeague//",league_acro,"_",season,"_Run",n_run,"_SAS_NewZ",".RData"))
-    }
+    MH_P = MH_Pois(X1, X2, att_0, def_0, home_0,
+                   X_mid, iter,
+                   sd_prop_att, att_mean_prior, att_sd_prior, 
+                   sd_prop_def, def_mean_prior, def_sd_prior,
+                   sd_prop_home, home_mean_prior, home_sd_prior,
+                   verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
+                   league_acro = league_acro, season = season)
+    
+    MH_P = thin_mcmc(MH_P, 5) # Optional: thin MCMC, keeping 1 every 5 samples to save storage space
+    
+    saveRDS(MH_P, paste0(mcmc_out_dir, "Pois_FullLeague/", league_acro, "_", season, "_Pois.rds"))
+    
+    ### CMP-SAS Model
+    MH_SAS = MH_CMP_SAS(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+                        X_mid, iter,
+                        sd_prop_att, att_mean_prior, att_sd_prior, 
+                        sd_prop_def, def_mean_prior, def_sd_prior,
+                        sd_prop_home, home_mean_prior, home_sd_prior,
+                        sd_prop_eta, eta_mean_prior, eta_sd_prior, rho,
+                        p_alpha_prior, p_beta_prior, 
+                        verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
+                        league_acro = league_acro, season = season)
+    
+    MH_SAS = thin_mcmc(MH_SAS, 5) 
+    
+    saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+    
+    ### CMP-Full model
+    
+    MH_CMP = MH_CMP_Full(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+                         X_mid, iter,
+                         sd_prop_att, att_mean_prior, att_sd_prior, 
+                         sd_prop_def, def_mean_prior, def_sd_prior,
+                         sd_prop_home, home_mean_prior, home_sd_prior,
+                         sd_prop_eta, eta_mean_prior, eta_sd_prior, rho,
+                         p_alpha_prior, p_beta_prior, 
+                         verbosity = verbosity, print_by = print_freq, fix_idx = fixed_i, 
+                         league_acro = league_acro, season = season)
+    
+    MH_CMP = thin_mcmc(MH_CMP, 5)
+    
+    saveRDS(MH_CMP, paste0(mcmc_out_dir, "CMP_FullLeague/", league_acro, "_", season, "_CMP.rds"))
   }
 }
-
-# retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, 5000, 50000)
-# 
-mcmc_out_dir = "Data/MCMC_Outputs/"
-saveRDS(MH_SAS, paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
-# colMeans(test$Z_post[5000:50000,])
-# MH_SAS$team_names
-# 
-season = '2223'
-test = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
-retrieve_nu_sas_summ(test$Z_post, test$nu_post, 5000, 100000)
-# 
-# MH_object = test
-# 
-# MH_object$nu_post = MH_object$nu_post[seq(1, 250000, by = 5),]
-# MH_object$Z_post = MH_object$Z_post[seq(1, 250000, by = 5),]
-# MH_object$p_post = MH_object$p_post[seq(1, 250000, by = 5),]
-# 
-# # colMeans(test$Z_post[10000:200000,])
-# retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, 10000, 50000)
-
-
-MH_SAS = r
-
-saveRDS(MH_SAS, paste0(mcmc_out_dir, "Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))  
-
-
-
-
 
 
 

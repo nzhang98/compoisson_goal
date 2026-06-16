@@ -266,7 +266,7 @@ generate_team_goals = function(team_i, N, att_vector, def_vector, nu_vector, X_m
 #### Main Algorithm
 ######################
 
-MH_CMP = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
+MH_CMP_SAS = function(X1, X2, att_0, def_0, home_0, Z_0, p_0, eta_0, 
                       X_mid = FALSE, iter=100, 
                       sd_prop_att = 1, att_mean_prior = 0, att_sd_prior = 1,
                       sd_prop_def = 1, def_mean_prior = 0, def_sd_prior = 1,
