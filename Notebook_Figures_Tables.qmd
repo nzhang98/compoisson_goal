@@ -219,6 +219,243 @@ p2 = generate_cmp_contour_plot(x, 1, 2)
 p1+p2
 ```
 
+##### Figure 3
+
+```{r}
+nus_overdispersed = seq(0.2, 0.90, by = 0.1)
+n_seeds = 5
+threshold = 0.5
+
+big_Z_nd = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+big_Z_ed = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+
+significant_nu_nd = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+significant_nu_ed = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+  
+colnames(big_Z_nd) = nus_overdispersed
+colnames(big_Z_ed) = nus_overdispersed
+
+colnames(significant_nu_nd) = nus_overdispersed
+colnames(significant_nu_ed) = nus_overdispersed
+
+for (nu_scalar in nus_overdispersed){
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  
+  vec_Z_nd = NULL
+  vec_Z_ed = NULL
+  
+  vec_sign_nu_nd = NULL
+  vec_sign_nu_ed = NULL
+  for (run in 1:n_seeds){
+    sim = simulations_list[[run]]
+    
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    t = MH_SAS$iterations
+    
+    Z_nd = MH_SAS$Z_post[(t/5):t, sim$nu_true != 1 ]
+    Z_ed = MH_SAS$Z_post[(t/5):t, sim$nu_true == 1]
+    vec_Z_nd = c(vec_Z_nd, colMeans(Z_nd))
+    vec_Z_ed = c(vec_Z_ed, colMeans(Z_ed))
+    
+    {
+      nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
+      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      included = as.integer(nu_summ[1,] >= threshold)
+      
+      vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
+      vec_sign_nu_ed = c(vec_sign_nu_ed, included[sim$nu_true == 1])
+    }
+  }  
+  
+  big_Z_nd[,as.character(nu_scalar)] = vec_Z_nd
+  big_Z_ed[,as.character(nu_scalar)] = vec_Z_ed
+  
+  significant_nu_nd[,as.character(nu_scalar)] = vec_sign_nu_nd
+  significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
+}
+
+df1 <- as.data.frame(big_Z_nd)
+df2 <- as.data.frame(big_Z_ed)
+
+df1$ID <- 1:nrow(df1)
+df2$ID <- 1:nrow(df2)
+df1$Group <- "Overdispersed"
+df2$Group <- "Equidispersed"
+df_long <- bind_rows(df1, df2)
+
+df_long <- pivot_longer(
+  df_long,
+  cols = all_of(as.character(nus_overdispersed)),
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+p_od = ggplot(df_long, aes(x = Group, y = Value, fill = Group)) +
+  geom_boxplot(outlier.size = 0.8, width = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = 'dashed', linewidth = 0.5, color = 'red') +
+  facet_wrap(~ Variable, nrow = 1) +  # Adjust nrow/ncol as needed
+  coord_cartesian(ylim = c(0, 1)) + 
+  theme_minimal() +
+  scale_fill_manual(
+    name = "",  # Legend title
+    values = c("Overdispersed" = "#1b9e77", "Equidispersed" = "#1f77b4")  # Custom colors
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.box.margin = margin(t = -10),
+    legend.margin = margin(t = -5),
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(title = "", y = expression( P(Z[i] == 1 ~ "|" ~ bold(Y))), x = "")
+
+od_sign_ed = significant_nu_ed
+od_sign_nd = significant_nu_nd
+
+nus_underdispersed = seq(1.2, 4, by = 0.4)
+
+big_Z_nd = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+big_Z_ed = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+
+significant_nu_nd = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+significant_nu_ed = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+
+colnames(big_Z_nd) = nus_underdispersed
+colnames(big_Z_ed) = nus_underdispersed
+
+colnames(significant_nu_nd) = nus_underdispersed
+colnames(significant_nu_ed) = nus_underdispersed
+
+n_seeds = 5
+for (nu_scalar in nus_underdispersed){
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  vec_Z_nd = NULL
+  vec_Z_ed = NULL
+  
+  vec_sign_nu_nd = NULL
+  vec_sign_nu_ed = NULL
+  for (run in 1:n_seeds){
+    sim = simulations_list[[run]]
+    
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    t = MH_SAS$iterations
+    
+    Z_nd = MH_SAS$Z_post[(t/5):t, sim$nu_true != 1 ]
+    Z_ed = MH_SAS$Z_post[(t/5):t, sim$nu_true == 1]
+    vec_Z_nd = c(vec_Z_nd, colMeans(Z_nd))
+    vec_Z_ed = c(vec_Z_ed, colMeans(Z_ed))
+    
+    {
+      nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
+      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      included = as.integer(nu_summ[1,] >= threshold)
+      
+      vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
+      vec_sign_nu_ed = c(vec_sign_nu_ed, included[sim$nu_true == 1])
+    }
+  }  
+  
+  big_Z_nd[,as.character(nu_scalar)] = vec_Z_nd
+  big_Z_ed[,as.character(nu_scalar)] = vec_Z_ed
+  
+  significant_nu_nd[,as.character(nu_scalar)] = vec_sign_nu_nd
+  significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
+}
+
+df1 <- as.data.frame(big_Z_nd)
+df2 <- as.data.frame(big_Z_ed)
+
+df1$ID <- 1:nrow(df1)
+df2$ID <- 1:nrow(df2)
+df1$Group <- "Underdispersed"
+df2$Group <- "Equidispersed"
+df_long <- bind_rows(df1, df2)
+
+df_long <- pivot_longer(
+  df_long,
+  cols = all_of(as.character(nus_underdispersed)),
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+p_ud = ggplot(df_long, aes(x = Group, y = Value, fill = Group)) +
+  geom_boxplot(outlier.size = 0.8, width = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = 'dashed', linewidth = 0.5, color = 'red') +
+  facet_wrap(~ Variable, nrow = 1) +  # Adjust nrow/ncol as needed
+  coord_cartesian(ylim = c(0, 1)) + 
+  theme_minimal() +
+  scale_fill_manual(
+    name = "",  # Legend title
+    values = c("Underdispersed" = "#D55E00", "Equidispersed" = "#1f77b4")  # Custom colors
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.box.margin = margin(t = -10),
+    legend.margin = margin(t = -5),
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(title = "", y = expression(P(Z[i] == 1 ~ "|" ~ bold(Y))), x = "")
+
+ud_sign_ed = significant_nu_ed
+ud_sign_nd = significant_nu_nd
+
+p_od / p_ud
+```
+
+##### Table 1
+
+```{r}
+out_table = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
+            c(colMeans(od_sign_nd), colMeans(ud_sign_nd)))
+
+out_table
+```
+
+##### Table 2
+
+```{r}
+n_samples = 5000
+n_seeds = 3
+
+disp_vec = c(0.3, 0.6, 0.9, 1.2, 2, 4)
+
+waic_table = data.frame(matrix(NA_real_, nrow = 3, 3*length(disp_vec)))
+colnames(waic_table) = rep(disp_vec, each = 3)
+colnames(loo_table) = rep(disp_vec, each = 3)
+col_idx = 1
+for (nu_scalar in disp_vec){
+  print(nu_scalar)
+  loo_list = vector("list", 3)
+  waic_list = vector("list", 3)
+  
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  
+  for (run in c(1,4,5)){
+    sim = simulations_list[[run]]
+    
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_CMP.rds"))
+    t = MH_SAS$iterations
+    X = sim$X_sim
+    
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+  
+    waic_table[1, col_idx] = -2*(P_WAIC$lppd - P_WAIC$p_waic)
+    waic_table[2, col_idx] = -2*(SAS_WAIC$lppd - SAS_WAIC$p_waic)
+    waic_table[3, col_idx] = -2*(CMP_WAIC$lppd - CMP_WAIC$p_waic)
+    col_idx = col_idx + 1
+  }
+}
+
+waic_table
+```
+
+
+
 ##### Figure 6
 
 ```{r fig6}
@@ -230,7 +467,7 @@ MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", se
 t = MH_object$iterations
 N = length(MH_object$team_names)
 
-nus = MH_object$nu_post[(t/10):t, ]
+nus = MH_object$nu_post[(t/5):t, ]
 nus[nus == 1] = NA
 
 quantiles = apply(nus, 2, function(x) quantile(x, probs = c(0.1, 0.9), na.rm = TRUE))
@@ -250,7 +487,7 @@ group_colors = c("Underdispersed" = "#D55E00", "Overdispersed" = "#009E73", "Equ
 groups = mapply(classify, quantiles[1, ], quantiles[2, ])
 names(groups) =  MH_object$team_names
 
-p_z1 = retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, (t/10)+1, t)[1,]
+p_z1 = retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, (t/5)+1, t)[1,]
 names(p_z1) = MH_object$team_names
 
 groups[p_z1 <= 0.49] = "Equidispersed"
@@ -371,27 +608,31 @@ p2+p3
 
 ##### Att and Mean scatter plot comparison
 
-```{r fig7}
-# library(matrixStats)
+```{r}
+library(ggrepel)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(cowplot)
 
 league_acro = 'PL'
 season = '2324'
 
-load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run1_Pois",".RData"))
+MH_P = readRDS(paste0(mcmc_out_dir, "Pois_FullLeague/", league_acro, "_", season, "_Pois.rds"))
 
 t = MH_P$iterations
 df_plot = data.frame(att_means = colMeans(MH_P$att_post[(t/5):t,]),
                      def_means = colMeans(MH_P$def_post[(t/5):t,]),
                      label = MH_P$team_names)
 
-MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+MH_SAS = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
 
-t = MH_object$iterations
-df_plot2 = data.frame(att_means = colMeans(MH_object$att_post[(t/5):t,]),
-                      def_means = colMeans(MH_object$def_post[(t/5):t,]),
-                      label = MH_object$team_names)
+t = MH_SAS$iterations
+df_plot2 = data.frame(att_means = colMeans(MH_SAS$att_post[(t/5):t,]),
+                      def_means = colMeans(MH_SAS$def_post[(t/5):t,]),
+                      label = MH_SAS$team_names)
 
-team_names = MH_object$team_names
+team_names = MH_SAS$team_names
 
 df_colors = data.frame(
   name = team_names,
@@ -421,38 +662,81 @@ df_colors = data.frame(
 df_plot = cbind(df_plot, colors = df_colors$color)
 df_plot2 = cbind(df_plot2, colors = df_colors$color)
 
-library(ggrepel)
-p1 =  ggplot(df_plot, aes(x = att_means, y = def_means, label = team_names)) +
-  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+# --- Customizable legend labels ---
+legend_labels = c(
+  "Overdispersed",   # green
+  "Underdispersed",          # orange
+  "Equidispersed"               # grey
+)
+
+# --- p1 and p2 ---
+p1 = ggplot(df_plot, aes(x = att_means, y = def_means, label = label)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) +
+  geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
   scale_y_reverse() +
-  theme_minimal() + 
+  theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  coord_cartesian(xlim = c(-2, 0.8)) +
-  scale_y_continuous(limits = c(-1, 0.8)) + 
+  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('Poisson Model')
-p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = team_names)) +
-  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+
+p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = label)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) +
+  geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
   scale_y_reverse() +
-  theme_minimal() + 
+  theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  coord_cartesian(xlim = c(-2, 0.8)) +
+  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('CMP-SAS Model')
 
-plots = list()
-plots[[1]] = p1
-plots[[2]] = p2
+# --- Legend as a grob (boxed) ---
+legend_grob = legendGrob(
+  labels = legend_labels,
+  pch    = 19,
+  gp     = gpar(
+    col    = c("#009E73", "#D55E00", "gray"),
+    fill   = c("#009E73", "#D55E00", "gray"),
+    fontsize = 9
+  ),
+  vgap   = unit(0.6, "lines")
+)
 
+boxed_legend = grobTree(
+  rectGrob(gp = gpar(fill = "white", col = "grey70", lwd = 1)),
+  legend_grob,
+  vp = viewport(width = unit(1, "npc"), height = unit(1, "npc"))
+)
 
-do.call("grid.arrange", c(plots, nrow = 1, ncol = 2, left = 'Mean DEF', bottom = 'Mean ATT'))
+# --- Combine p1 and p2 side by side ---
+combined = plot_grid(p1, p2, nrow = 1, ncol = 2)
+
+# --- Overlay the legend box at the centre seam ---
+# xmin/xmax/ymin/ymax are in [0,1] relative to the full combined plot
+# Adjust these to shift the box left/right/up/down
+final_plot = ggdraw(combined) +
+  draw_grob(
+    boxed_legend,
+    x      = 0.46,   # left edge of box (0 = far left, 1 = far right)
+    y      = 0.70,   # bottom edge of box (0 = bottom, 1 = top)
+    width  = 0.16,   # box width  — increase if text is clipped
+    height = 0.18    # box height — increase if items overlap
+  )
+
+# --- Add shared axis labels ---
+final_plot = ggdraw(final_plot) +
+  draw_label("Mean ATT", x = 0.5, y = 0.02, hjust = 0.5, size = 11) +
+  draw_label("Mean DEF", x = 0.02, y = 0.5,  hjust = 0.5, size = 11, angle = 90)
+
+final_plot
 ```
 
 ##### Table 3
@@ -462,7 +746,7 @@ library(kableExtra)
 league_acro = 'PL'
 season = '2324'
 
-load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run1_Pois",".RData"))
+MH_P = readRDS(paste0(mcmc_out_dir, "Pois_FullLeague/", league_acro, "_", season, "_Pois.rds"))
 
 t = MH_P$iterations
 pois_pars = retrieve_pars_summ(MH_P, burn_in = 0.2)[,1]
@@ -499,12 +783,11 @@ df_latex = df_sort |>
 
 for (j in 1:5) {
   df_latex[[j]] = sprintf(
-    "%.3f (%.3f)",
+    "%.3f {(%.3f)}",
     df_latex[[j]],
     df_sd[, j]
   )
 }
-
 rn = rownames(df_latex)
 rownames(df_latex) = paste0("\\textit{", rn, "}")
 
@@ -517,6 +800,6 @@ table3 = kable(
   escape = FALSE                          # allow italic row names
 )
 
-print(table3)
+table3
 
 ```
