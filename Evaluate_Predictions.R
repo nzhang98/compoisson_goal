@@ -16,8 +16,14 @@ for(L in 1){
   for (season_seq in 1:5){
     season = seasons_strvec[season_seq]
     
-    file.rename(paste0("Data/Predictions/",league_acro, season,"_SAS_insample.RData"), 
-                paste0("Data/Predictions/",league_acro, season,"_SAS_insample.rds"))
+    file.rename(paste0("Data/Predictions/",league_acro, season,"_Pois_oos.RData"), 
+                paste0("Data/Predictions/",league_acro, season,"_Pois_oos.rds"))
+    
+    file.rename(paste0("Data/Predictions/",league_acro, season,"_SAS_oos.RData"), 
+                paste0("Data/Predictions/",league_acro, season,"_SAS_oos.rds"))
+    
+    file.rename(paste0("Data/Predictions/",league_acro, season,"_CMP_oos.RData"), 
+                paste0("Data/Predictions/",league_acro, season,"_CMP_oos.rds"))
     # 
     # load(file = paste0("Data/Predictions/",league_acro, season,"_Pois_insample.RData"))
     # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_Pois_insample.RData"))
@@ -277,7 +283,7 @@ compute_goaldiff_eval = function(league_acro, season_start, season_end,
   
   for (season in seasons_strvec){
     if (league_acro == 'LC' && season == '1920'){next}
-    merge_df = read_historics(season, league_acro)
+    df_hist = read_historics(season, league_acro)
     pois_pred = readRDS(file = paste0("Data/Predictions/",league_acro, season,"_Pois_", regime, ".rds"))$list_preds
     
     sas_pred = readRDS(file = paste0("Data/Predictions/",league_acro, season,"_SAS_", regime, ".rds"))$list_preds
@@ -316,15 +322,19 @@ compute_goaldiff_eval = function(league_acro, season_start, season_end,
     # for (game_id in start_id:tot_games){
     for (game_id in match_ids){
       if (regime == 'oos'){if (game_id <= tot_games/2){next}}
-      hg = min(as.numeric(merge_df[game_id, 'FTHG']), 5)
-      ag = min(as.numeric(merge_df[game_id, 'FTAG']), 5)
+      hg = min(as.numeric(df_hist[game_id, 'FTHG']), 7)
+      ag = min(as.numeric(df_hist[game_id, 'FTAG']), 7)
       goal_diff_obs = hg - ag
       
       cum_gd_obs = as.integer(gd_outcomes <= goal_diff_obs)
       
-      pois_goaldiff = compute_goaldiff_probs(truncate_forecast(pois_pred[[game_id]], 2)/100)
-      sas_goaldiff = compute_goaldiff_probs(truncate_forecast(sas_pred[[game_id]], 2)/100)
-      cmp_goaldiff = compute_goaldiff_probs(truncate_forecast(cmp_pred[[game_id]], 2)/100)
+      # pois_goaldiff = compute_goaldiff_probs(truncate_forecast(pois_pred[[game_id]], 2)/100)
+      # sas_goaldiff = compute_goaldiff_probs(truncate_forecast(sas_pred[[game_id]], 2)/100)
+      # cmp_goaldiff = compute_goaldiff_probs(truncate_forecast(cmp_pred[[game_id]], 2)/100)
+
+      pois_goaldiff = compute_goaldiff_probs(pois_pred[[game_id]]/100)
+      sas_goaldiff = compute_goaldiff_probs(sas_pred[[game_id]]/100)
+      cmp_goaldiff = compute_goaldiff_probs(cmp_pred[[game_id]]/100)
       
       pois_rps[[game_id]] = gd_rps(pois_goaldiff, cum_gd_obs)
       sas_rps[[game_id]] = gd_rps(sas_goaldiff, cum_gd_obs)
@@ -356,7 +366,7 @@ compute_overunder_eval = function(league_acro, season_start, season_end, overund
   
   for (season in seasons_strvec){
     if (league_acro == 'LC' && season == '1920'){next}
-    merge_df = read_historics(season, league_acro)
+    df_hist = read_historics(season, league_acro)
     
     pois_pred = readRDS(file = paste0("Data/Predictions/",league_acro, season,"_Pois_", regime, ".rds"))$list_preds
     
@@ -365,7 +375,7 @@ compute_overunder_eval = function(league_acro, season_start, season_end, overund
     cmp_pred = readRDS(file = paste0("Data/Predictions/",league_acro, season,"_CMP_", regime, ".rds"))$list_preds
 
     
-    tot_games = nrow(merge_df)
+    tot_games = nrow(df_hist)
     
     pois_rps = rep(NA_real_, tot_games)  
     pois_ign = rep(NA_real_, tot_games)  
@@ -397,8 +407,8 @@ compute_overunder_eval = function(league_acro, season_start, season_end, overund
     # for (game_id in start_id:tot_games){
     for (game_id in match_ids){
       if (regime == 'oos'){if (game_id <= tot_games/2){next}}
-      hg = min(as.numeric(merge_df[game_id, 'FTHG']), 7)
-      ag = min(as.numeric(merge_df[game_id, 'FTAG']), 7)
+      hg = min(as.numeric(df_hist[game_id, 'FTHG']), 7)
+      ag = min(as.numeric(df_hist[game_id, 'FTAG']), 7)
       tot_goals = hg + ag
       
       obs_vec = c(as.numeric(tot_goals < overunder), as.numeric(tot_goals > overunder))
@@ -457,8 +467,9 @@ round(gd_oos,3)
 out_table = round(cbind(outcome_oos[,1:5], overunder_oos[,1:5], gd_oos[,1:5]),4)
 out_table = round(rbind(outcome_oos[4:6,1:5], 
                         overunder_oos[4:6,1:5], 
-                        gd_oos[4:6,1:5]),3)
+                        gd_oos[4:6,1:5]),4)
 
+out_table
 out_table = round(rbind(outcome_oos[1:3,1:5], 
                         overunder_oos[1:3,1:5], 
                         gd_oos[1:3,1:5]),3)
@@ -650,10 +661,11 @@ L = 1
 league = leagues[L]
 league_acro = league_acros[L]
 
-seasons_strvec = generate_season_string(2015, 2020)
+seasons_strvec = generate_season_string(2015, 2025)
 
 n_seeds = 1
 
+set.seed(1)
 IC_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
 lppd_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
 pwaic_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
