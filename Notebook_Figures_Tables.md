@@ -9,36 +9,15 @@ This notebook reproduces all figures and tables in the paper
 
 ``` r
 source('utils.R') # Contains all utility functions to support modelling and analysis, including functions to import/export data, manipulate the MH_posterior objects from the MCMC routines, and generate predictions
-```
-
-    Warning: package 'purrr' was built under R version 4.3.3
-
-
-    Attaching package: 'dplyr'
-
-    The following object is masked from 'package:gridExtra':
-
-        combine
-
-    The following objects are masked from 'package:stats':
-
-        filter, lag
-
-    The following objects are masked from 'package:base':
-
-        intersect, setdiff, setequal, union
-
-    Warning: package 'tidyr' was built under R version 4.3.3
-
-
-    Attaching package: 'tidyr'
-
-    The following object is masked from 'package:reshape2':
-
-        smiths
-
-``` r
 library(patchwork)
+library(ggrepel)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(cowplot)
+library(ggridges)
+library(forcats)
+library(kableExtra)
 mcmc_out_dir = "Data/MCMC_Outputs/"
 ```
 
@@ -250,14 +229,262 @@ p1+p2
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig4-1.png)
 
-##### Figure 6
+##### Figure 3
 
 ``` r
-library(ggridges)
-library(forcats)
+nus_overdispersed = seq(0.2, 0.90, by = 0.1)
+n_seeds = 5
+threshold = 0.5
+
+big_Z_nd = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+big_Z_ed = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+
+significant_nu_nd = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+significant_nu_ed = matrix(NA, nrow = 50, ncol = length(nus_overdispersed))
+  
+colnames(big_Z_nd) = nus_overdispersed
+colnames(big_Z_ed) = nus_overdispersed
+
+colnames(significant_nu_nd) = nus_overdispersed
+colnames(significant_nu_ed) = nus_overdispersed
+
+for (nu_scalar in nus_overdispersed){
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  
+  vec_Z_nd = NULL
+  vec_Z_ed = NULL
+  
+  vec_sign_nu_nd = NULL
+  vec_sign_nu_ed = NULL
+  for (run in 1:n_seeds){
+    sim = simulations_list[[run]]
+    
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    t = MH_SAS$iterations
+    
+    Z_nd = MH_SAS$Z_post[(t/5):t, sim$nu_true != 1 ]
+    Z_ed = MH_SAS$Z_post[(t/5):t, sim$nu_true == 1]
+    vec_Z_nd = c(vec_Z_nd, colMeans(Z_nd))
+    vec_Z_ed = c(vec_Z_ed, colMeans(Z_ed))
+    
+    {
+      nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
+      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      included = as.integer(nu_summ[1,] >= threshold)
+      
+      vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
+      vec_sign_nu_ed = c(vec_sign_nu_ed, included[sim$nu_true == 1])
+    }
+  }  
+  
+  big_Z_nd[,as.character(nu_scalar)] = vec_Z_nd
+  big_Z_ed[,as.character(nu_scalar)] = vec_Z_ed
+  
+  significant_nu_nd[,as.character(nu_scalar)] = vec_sign_nu_nd
+  significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
+}
+
+df1 <- as.data.frame(big_Z_nd)
+df2 <- as.data.frame(big_Z_ed)
+
+df1$ID <- 1:nrow(df1)
+df2$ID <- 1:nrow(df2)
+df1$Group <- "Overdispersed"
+df2$Group <- "Equidispersed"
+df_long <- bind_rows(df1, df2)
+
+df_long <- pivot_longer(
+  df_long,
+  cols = all_of(as.character(nus_overdispersed)),
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+p_od = ggplot(df_long, aes(x = Group, y = Value, fill = Group)) +
+  geom_boxplot(outlier.size = 0.8, width = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = 'dashed', linewidth = 0.5, color = 'red') +
+  facet_wrap(~ Variable, nrow = 1) +  # Adjust nrow/ncol as needed
+  coord_cartesian(ylim = c(0, 1)) + 
+  theme_minimal() +
+  scale_fill_manual(
+    name = "",  # Legend title
+    values = c("Overdispersed" = "#1b9e77", "Equidispersed" = "#1f77b4")  # Custom colors
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.box.margin = margin(t = -10),
+    legend.margin = margin(t = -5),
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(title = "", y = expression( P(Z[i] == 1 ~ "|" ~ bold(Y))), x = "")
+
+od_sign_ed = significant_nu_ed
+od_sign_nd = significant_nu_nd
+
+nus_underdispersed = seq(1.2, 4, by = 0.4)
+
+big_Z_nd = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+big_Z_ed = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+
+significant_nu_nd = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+significant_nu_ed = matrix(NA, nrow = 50, ncol = length(nus_underdispersed))
+
+colnames(big_Z_nd) = nus_underdispersed
+colnames(big_Z_ed) = nus_underdispersed
+
+colnames(significant_nu_nd) = nus_underdispersed
+colnames(significant_nu_ed) = nus_underdispersed
+
+n_seeds = 5
+for (nu_scalar in nus_underdispersed){
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  vec_Z_nd = NULL
+  vec_Z_ed = NULL
+  
+  vec_sign_nu_nd = NULL
+  vec_sign_nu_ed = NULL
+  for (run in 1:n_seeds){
+    sim = simulations_list[[run]]
+    
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    t = MH_SAS$iterations
+    
+    Z_nd = MH_SAS$Z_post[(t/5):t, sim$nu_true != 1 ]
+    Z_ed = MH_SAS$Z_post[(t/5):t, sim$nu_true == 1]
+    vec_Z_nd = c(vec_Z_nd, colMeans(Z_nd))
+    vec_Z_ed = c(vec_Z_ed, colMeans(Z_ed))
+    
+    {
+      nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
+      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      included = as.integer(nu_summ[1,] >= threshold)
+      
+      vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
+      vec_sign_nu_ed = c(vec_sign_nu_ed, included[sim$nu_true == 1])
+    }
+  }  
+  
+  big_Z_nd[,as.character(nu_scalar)] = vec_Z_nd
+  big_Z_ed[,as.character(nu_scalar)] = vec_Z_ed
+  
+  significant_nu_nd[,as.character(nu_scalar)] = vec_sign_nu_nd
+  significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
+}
+
+df1 <- as.data.frame(big_Z_nd)
+df2 <- as.data.frame(big_Z_ed)
+
+df1$ID <- 1:nrow(df1)
+df2$ID <- 1:nrow(df2)
+df1$Group <- "Underdispersed"
+df2$Group <- "Equidispersed"
+df_long <- bind_rows(df1, df2)
+
+df_long <- pivot_longer(
+  df_long,
+  cols = all_of(as.character(nus_underdispersed)),
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+p_ud = ggplot(df_long, aes(x = Group, y = Value, fill = Group)) +
+  geom_boxplot(outlier.size = 0.8, width = 0.6) +
+  geom_hline(yintercept = 0.5, linetype = 'dashed', linewidth = 0.5, color = 'red') +
+  facet_wrap(~ Variable, nrow = 1) +  # Adjust nrow/ncol as needed
+  coord_cartesian(ylim = c(0, 1)) + 
+  theme_minimal() +
+  scale_fill_manual(
+    name = "",  # Legend title
+    values = c("Underdispersed" = "#D55E00", "Equidispersed" = "#1f77b4")  # Custom colors
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom",
+    legend.box.margin = margin(t = -10),
+    legend.margin = margin(t = -5),
+    strip.text = element_text(face = "bold")
+  ) +
+  labs(title = "", y = expression(P(Z[i] == 1 ~ "|" ~ bold(Y))), x = "")
+
+ud_sign_ed = significant_nu_ed
+ud_sign_nd = significant_nu_nd
+
+p_od / p_ud
 ```
 
-    Warning: package 'forcats' was built under R version 4.3.3
+![](Notebook_Figures_Tables_files/figure-commonmark/fig3-1.png)
+
+##### Table 1
+
+``` r
+out_table = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
+            c(colMeans(od_sign_nd), colMeans(ud_sign_nd)))
+
+out_table
+```
+
+          0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1.2  1.6    2  2.4  2.8  3.2  3.6
+    [1,] 0.12 0.16 0.12 0.10 0.10 0.16 0.12 0.16 0.06 0.14 0.04 0.12 0.10 0.12 0.12
+    [2,] 1.00 0.94 0.90 0.58 0.48 0.22 0.14 0.04 0.18 0.42 0.52 0.84 0.84 0.94 0.94
+            4
+    [1,] 0.06
+    [2,] 0.98
+
+##### Table 2
+
+``` r
+n_samples = 5000
+n_seeds = 3
+
+disp_vec = c(0.3, 0.6, 0.9, 1.2, 2, 4)
+
+waic_table = data.frame(matrix(NA_real_, nrow = 3, 3*length(disp_vec)))
+colnames(waic_table) = rep(disp_vec, each = 3)
+col_idx = 1
+for (nu_scalar in disp_vec){
+  loo_list = vector("list", 3)
+  waic_list = vector("list", 3)
+  
+  simulations_list = readRDS(file = paste0("Data//Simulations//SAS_sim_nubase_",gsub("\\.", "_", as.character(nu_scalar)),".rds"))
+  
+  for (run in c(1,4,5)){
+    sim = simulations_list[[run]]
+    
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//Simulations/SAS_SIM_Nu",gsub("\\.", "_", as.character(nu_scalar)),"_Run",run,"_CMP.rds"))
+    t = MH_SAS$iterations
+    X = sim$X_sim
+    
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+  
+    waic_table[1, col_idx] = -2*(P_WAIC$lppd - P_WAIC$p_waic)
+    waic_table[2, col_idx] = -2*(SAS_WAIC$lppd - SAS_WAIC$p_waic)
+    waic_table[3, col_idx] = -2*(CMP_WAIC$lppd - CMP_WAIC$p_waic)
+    col_idx = col_idx + 1
+  }
+}
+
+waic_table
+```
+
+           0.3      0.3      0.3      0.6      0.6      0.6      0.9      0.9
+    1 2836.559 2789.239 2873.057 2263.988 2393.089 2354.292 2131.330 2189.933
+    2 2640.590 2619.607 2656.669 2242.318 2374.925 2325.963 2130.564 2190.800
+    3 2646.432 2615.360 2657.717 2244.390 2375.235 2329.336 2133.790 2208.895
+           0.9      1.2      1.2      1.2        2        2        2        4
+    1 2157.190 2060.392 2055.170 2109.857 1918.956 1914.991 1939.388 1838.586
+    2 2159.909 2066.579 2054.312 2115.899 1914.236 1899.143 1931.012 1752.425
+    3 2176.004 2081.218 2067.841 2125.238 1920.374 1908.140 1937.320 1749.964
+             4        4
+    1 1841.329 1861.584
+    2 1754.530 1783.243
+    3 1751.591 1781.076
+
+##### Figure 6
 
 ``` r
 league_acro = 'PL'
@@ -266,7 +493,7 @@ MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", se
 t = MH_object$iterations
 N = length(MH_object$team_names)
 
-nus = MH_object$nu_post[(t/10):t, ]
+nus = MH_object$nu_post[(t/5):t, ]
 nus[nus == 1] = NA
 
 quantiles = apply(nus, 2, function(x) quantile(x, probs = c(0.1, 0.9), na.rm = TRUE))
@@ -286,7 +513,7 @@ group_colors = c("Underdispersed" = "#D55E00", "Overdispersed" = "#009E73", "Equ
 groups = mapply(classify, quantiles[1, ], quantiles[2, ])
 names(groups) =  MH_object$team_names
 
-p_z1 = retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, (t/10)+1, t)[1,]
+p_z1 = retrieve_nu_sas_summ(MH_object$Z_post, MH_object$nu_post, (t/5)+1, t)[1,]
 names(p_z1) = MH_object$team_names
 
 groups[p_z1 <= 0.49] = "Equidispersed"
@@ -364,12 +591,7 @@ p2 = ggplot(summary_df2, aes(
     y = NULL
   ) +
   geom_vline(xintercept = 0, color = "blue", linetype = "dashed", linewidth = 0.7)
-```
 
-    Warning in geom_density_ridges(scale = 1, rel_min_height = 0.01, alpha = 0.8, :
-    Ignoring unknown parameters: `size`
-
-``` r
 offset = 0
 p3 = ggplot(df_z1, aes(
   x = p_z1,
@@ -407,12 +629,6 @@ p3 = ggplot(df_z1, aes(
 p2+p3
 ```
 
-    Picking joint bandwidth of 0.049
-
-    Warning in geom_segment(aes(x = 0.5, xend = 0.5, y = 0.5, yend = 20.87), : All aesthetics have length 1, but the data has 20 rows.
-    ℹ Please consider using `annotate()` or provide this layer with data containing
-      a single row.
-
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig6-1.png)
 
 ##### Figure 7
@@ -420,26 +636,24 @@ p2+p3
 ##### Att and Mean scatter plot comparison
 
 ``` r
-# library(matrixStats)
-
 league_acro = 'PL'
 season = '2324'
 
-load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run1_Pois",".RData"))
+MH_P = readRDS(paste0(mcmc_out_dir, "Pois_FullLeague/", league_acro, "_", season, "_Pois.rds"))
 
 t = MH_P$iterations
 df_plot = data.frame(att_means = colMeans(MH_P$att_post[(t/5):t,]),
                      def_means = colMeans(MH_P$def_post[(t/5):t,]),
                      label = MH_P$team_names)
 
-MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
+MH_SAS = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
 
-t = MH_object$iterations
-df_plot2 = data.frame(att_means = colMeans(MH_object$att_post[(t/5):t,]),
-                      def_means = colMeans(MH_object$def_post[(t/5):t,]),
-                      label = MH_object$team_names)
+t = MH_SAS$iterations
+df_plot2 = data.frame(att_means = colMeans(MH_SAS$att_post[(t/5):t,]),
+                      def_means = colMeans(MH_SAS$def_post[(t/5):t,]),
+                      label = MH_SAS$team_names)
 
-team_names = MH_object$team_names
+team_names = MH_SAS$team_names
 
 df_colors = data.frame(
   name = team_names,
@@ -469,82 +683,92 @@ df_colors = data.frame(
 df_plot = cbind(df_plot, colors = df_colors$color)
 df_plot2 = cbind(df_plot2, colors = df_colors$color)
 
-library(ggrepel)
-```
+# --- Customizable legend labels ---
+legend_labels = c(
+  "Overdispersed",   # green
+  "Underdispersed",          # orange
+  "Equidispersed"               # grey
+)
 
-    Warning: package 'ggrepel' was built under R version 4.3.3
-
-``` r
-p1 =  ggplot(df_plot, aes(x = att_means, y = def_means, label = team_names)) +
-  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+# --- p1 and p2 ---
+p1 = ggplot(df_plot, aes(x = att_means, y = def_means, label = label)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) +
+  geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
   scale_y_reverse() +
-  theme_minimal() + 
+  theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  coord_cartesian(xlim = c(-2, 0.8)) +
-  scale_y_continuous(limits = c(-1, 0.8)) + 
+  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('Poisson Model')
-```
 
-    Scale for y is already present.
-    Adding another scale for y, which will replace the existing scale.
-
-``` r
-p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = team_names)) +
-  geom_jitter(aes(color = colors), shape = 19, size = 2) + geom_text_repel(size = 4, max.overlaps = 12) +
+p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = label)) +
+  geom_jitter(aes(color = colors), shape = 19, size = 2) +
+  geom_text_repel(size = 4, max.overlaps = 12) +
   scale_color_identity() +
   scale_y_reverse() +
-  theme_minimal() + 
+  theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  coord_cartesian(xlim = c(-2, 0.8)) +
+  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
   ggtitle('CMP-SAS Model')
+
+# --- Legend as a grob (boxed) ---
+legend_grob = legendGrob(
+  labels = legend_labels,
+  pch    = 19,
+  gp     = gpar(
+    col    = c("#009E73", "#D55E00", "gray"),
+    fill   = c("#009E73", "#D55E00", "gray"),
+    fontsize = 9
+  ),
+  vgap   = unit(0.6, "lines")
+)
+
+boxed_legend = grobTree(
+  rectGrob(gp = gpar(fill = "white", col = "grey70", lwd = 1)),
+  legend_grob,
+  vp = viewport(width = unit(1, "npc"), height = unit(1, "npc"))
+)
+
+# --- Combine p1 and p2 side by side ---
+combined = plot_grid(p1, p2, nrow = 1, ncol = 2)
+
+# --- Overlay the legend box at the centre seam ---
+# xmin/xmax/ymin/ymax are in [0,1] relative to the full combined plot
+# Adjust these to shift the box left/right/up/down
+final_plot = ggdraw(combined) +
+  draw_grob(
+    boxed_legend,
+    x      = 0.46,   # left edge of box (0 = far left, 1 = far right)
+    y      = 0.70,   # bottom edge of box (0 = bottom, 1 = top)
+    width  = 0.16,   # box width  — increase if text is clipped
+    height = 0.18    # box height — increase if items overlap
+  )
+
+# --- Add shared axis labels ---
+final_plot = ggdraw(final_plot) +
+  draw_label("Mean ATT", x = 0.5, y = 0.02, hjust = 0.5, size = 11) +
+  draw_label("Mean DEF", x = 0.02, y = 0.5,  hjust = 0.5, size = 11, angle = 90)
+
+final_plot
 ```
-
-    Scale for y is already present.
-    Adding another scale for y, which will replace the existing scale.
-
-``` r
-plots = list()
-plots[[1]] = p1
-plots[[2]] = p2
-
-
-do.call("grid.arrange", c(plots, nrow = 1, ncol = 2, left = 'Mean DEF', bottom = 'Mean ATT'))
-```
-
-    Warning: ggrepel: 10 unlabeled data points (too many overlaps). Consider
-    increasing max.overlaps
-
-    Warning: ggrepel: 7 unlabeled data points (too many overlaps). Consider
-    increasing max.overlaps
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig7-1.png)
 
 ##### Table 3
 
 ``` r
-library(kableExtra)
-```
-
-
-    Attaching package: 'kableExtra'
-
-    The following object is masked from 'package:dplyr':
-
-        group_rows
-
-``` r
 league_acro = 'PL'
 season = '2324'
 
-load(file = paste0("C:/Users/nakaz/OneDrive/Desktop/Research/SBM-CB/CMP_STZ//Data//MH_Results//Pois_FullLeague//",league_acro,"_",season,"_Run1_Pois",".RData"))
+MH_P = readRDS(paste0(mcmc_out_dir, "Pois_FullLeague/", league_acro, "_", season, "_Pois.rds"))
 
 t = MH_P$iterations
 pois_pars = retrieve_pars_summ(MH_P, burn_in = 0.2)[,1]
@@ -581,12 +805,11 @@ df_latex = df_sort |>
 
 for (j in 1:5) {
   df_latex[[j]] = sprintf(
-    "%.3f (%.3f)",
+    "%.3f {(%.3f)}",
     df_latex[[j]],
     df_sd[, j]
   )
 }
-
 rn = rownames(df_latex)
 rownames(df_latex) = paste0("\\textit{", rn, "}")
 
@@ -599,36 +822,226 @@ table3 = kable(
   escape = FALSE                          # allow italic row names
 )
 
-print(table3)
+table3
 ```
 
+``` r
+df_home_mu = c(pois_pars[1], sas_pars[1])
+df_home_sd = c(sd(MH_P$home_post[(t/5):t]), sd(MH_SAS$home_post[(t/5):t]))
 
-    \begin{tabular}{llSSSSS}
-    \toprule
-      & V1 & V2 & V3 & V4 & V5 & V6\\
-    \midrule
-    \textit{Nott'm Forest} & -0.221 (0.150) & 0.116 (0.125) & 0.054 (0.202) & 0.121 (0.126) & 1.395 (0.570) & 0.53\\
-    \textit{Liverpool} & 0.391 (0.112) & -0.419 (0.167) & 0.559 (0.124) & -0.399 (0.164) & 1.261 (0.419) & 0.45\\
-    \textit{Bournemouth} & -0.113 (0.145) & 0.124 (0.126) & 0.116 (0.170) & 0.121 (0.129) & 1.241 (0.448) & 0.45\\
-    \textit{Brentford} & -0.064 (0.139) & 0.092 (0.129) & 0.110 (0.177) & 0.084 (0.125) & 1.059 (0.261) & 0.31\\
-    \textit{Burnley} & -0.433 (0.165) & 0.279 (0.118) & -0.237 (0.398) & 0.273 (0.116) & 1.025 (0.292) & 0.34\\
-    \addlinespace
-    \textit{Man City} & 0.500 (0.104) & -0.643 (0.183) & 0.624 (0.125) & -0.607 (0.175) & 1.005 (0.161) & 0.24\\
-    \textit{Luton} & -0.136 (0.146) & 0.388 (0.112) & 0.025 (0.181) & 0.375 (0.110) & 0.999 (0.205) & 0.29\\
-    \textit{Newcastle} & 0.396 (0.111) & 0.065 (0.132) & 0.522 (0.142) & 0.068 (0.127) & 0.986 (0.158) & 0.25\\
-    \textit{Aston Villa} & 0.269 (0.118) & 0.039 (0.134) & 0.393 (0.156) & 0.037 (0.128) & 0.985 (0.165) & 0.26\\
-    \textit{Crystal Palace} & -0.053 (0.140) & -0.034 (0.135) & 0.089 (0.196) & -0.033 (0.132) & 0.973 (0.184) & 0.28\\
-    \addlinespace
-    \textit{Man United} & -0.049 (0.141) & -0.036 (0.135) & 0.059 (0.198) & -0.037 (0.135) & 0.968 (0.190) & 0.28\\
-    \textit{West Ham} & 0.020 (0.135) & 0.244 (0.121) & 0.132 (0.228) & 0.232 (0.117) & 0.963 (0.194) & 0.28\\
-    \textit{Arsenal} & 0.440 (0.109) & -0.854 (0.204) & 0.549 (0.143) & -0.793 (0.202) & 0.962 (0.156) & 0.26\\
-    \textit{Everton} & -0.477 (0.165) & -0.202 (0.147) & -0.343 (0.612) & -0.196 (0.140) & 0.958 (0.278) & 0.35\\
-    \textit{Tottenham} & 0.242 (0.120) & 0.039 (0.131) & 0.333 (0.199) & 0.031 (0.135) & 0.952 (0.187) & 0.29\\
-    \addlinespace
-    \textit{Sheffield United} & -0.603 (0.178) & 0.588 (0.102) & -0.606 (0.566) & 0.568 (0.100) & 0.919 (0.301) & 0.37\\
-    \textit{Chelsea} & 0.289 (0.118) & 0.075 (0.132) & 0.252 (0.417) & 0.070 (0.128) & 0.819 (0.263) & 0.44\\
-    \textit{Wolves} & -0.202 (0.147) & 0.088 (0.130) & -0.475 (0.798) & 0.074 (0.127) & 0.766 (0.301) & 0.50\\
-    \textit{Brighton} & -0.097 (0.139) & 0.035 (0.129) & -0.325 (0.472) & 0.028 (0.132) & 0.729 (0.281) & 0.54\\
-    \textit{Fulham} & -0.098 (0.141) & 0.014 (0.134) & -1.831 (1.615) & -0.018 (0.130) & 0.323 (0.216) & 0.96\\
-    \bottomrule
-    \end{tabular}
+rbind(df_home_mu,df_home_sd)
+```
+
+                   home_1     home_1
+    df_home_mu 0.47380539 0.37932212
+    df_home_sd 0.04056075 0.06466132
+
+#### Table 4
+
+``` r
+n_samples = 5000
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
+
+L = 1
+league = leagues[L]
+league_acro = league_acros[L]
+
+seasons_strvec = generate_season_string(2023, 2024)
+n_seeds = 1
+
+set.seed(1)
+IC_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+lppd_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+pwaic_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+colnames(IC_table) = seasons_strvec
+colnames(lppd_table) = seasons_strvec
+colnames(pwaic_table) = seasons_strvec
+for (season in seasons_strvec){
+  X = read_data(season, league)
+  X1 = X[[1]]
+  X2 = X[[2]]
+  
+  for (n_run in 1){
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Pois_FullLeague//",league_acro,"_",season,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//CMP_FullLeague//",league_acro,"_",season,"_CMP.rds"))
+    
+    stopifnot(all(MH_P$team_names == rownames(X1)))
+    stopifnot(all(MH_SAS$team_names == rownames(X1)))
+    stopifnot(MH_P$att_fix_idx == MH_SAS$att_fix_idx)
+
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+    
+    lppd_table[1, season] = P_WAIC$lppd
+    lppd_table[2, season] = SAS_WAIC$lppd
+    lppd_table[3, season] = CMP_WAIC$lppd
+    
+    pwaic_table[1, season] = P_WAIC$p_waic
+    pwaic_table[2, season] = SAS_WAIC$p_waic
+    pwaic_table[3, season] = CMP_WAIC$p_waic
+  }
+}
+
+IC_table = -2*(lppd_table - pwaic_table)
+round(cbind(lppd_table, pwaic_table, IC_table),1)
+```
+
+         2324 2324   2324
+    1 -1159.8 40.4 2400.3
+    2 -1141.7 43.3 2370.0
+    3 -1143.7 49.3 2386.1
+
+#### Figure 8
+
+``` r
+league_acro = 'PL'
+season = '2324'
+df_hist = read_historics(season, league_acro)
+game_id = 254
+
+row_hist = df_hist[game_id, ]
+ht = row_hist[['HomeTeam']]
+at = row_hist[['AwayTeam']]
+hg = row_hist[['FTHG']]
+ag = row_hist[['FTAG']]
+
+sas_preds = readRDS(file = paste0("Data//Predictions//",league_acro,season,"_SAS_oos.rds"))
+
+sas_mat = sas_preds$list_preds[[game_id]]
+
+sas_heatplot = plot_heatmap(sas_mat, "CMP-SAS Model", x = as.numeric(hg), y = as.numeric(ag))
+
+
+pois_preds = readRDS(file = paste0("Data//Predictions//",league_acro,season,"_Pois_oos.rds"))
+
+pois_mat = pois_preds$list_preds[[game_id]]
+pois_heatplot = plot_heatmap(pois_mat, "Poisson Model",x = as.numeric(hg), y = as.numeric(ag))
+
+combined_plot = (pois_heatplot | plot_spacer() | sas_heatplot) +
+  plot_layout(widths = c(1, 0, 1)) +
+  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", Premier League ", season, ", Out of sample prediction % probabilities"))
+
+sas_prob = c(sum(sas_mat[upper.tri(sas_mat)]),
+             sum(diag(sas_mat)),
+             sum(sas_mat[lower.tri(sas_mat)]))
+pois_prob = c(sum(pois_mat[upper.tri(pois_mat)]),
+              sum(diag(pois_mat)),
+              sum(pois_mat[lower.tri(pois_mat)]))
+
+combined_plot 
+```
+
+![](Notebook_Figures_Tables_files/figure-commonmark/fig8-1.png)
+
+``` r
+rbind(c('HomeWin', 'Draw', 'AwayWin'),
+      sas_prob,
+      pois_prob)
+```
+
+              [,1]      [,2]     [,3]     
+              "HomeWin" "Draw"   "AwayWin"
+    sas_prob  "49.704"  "23.288" "27.008" 
+    pois_prob "54.076"  "26.306" "19.618" 
+
+#### Table 6
+
+``` r
+n_samples = 5000
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
+
+L = 1
+league = leagues[L]
+league_acro = league_acros[L]
+
+seasons_strvec = generate_season_string(2020, 2025)
+n_seeds = 1
+
+set.seed(1)
+IC_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+lppd_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+pwaic_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+colnames(IC_table) = seasons_strvec
+colnames(lppd_table) = seasons_strvec
+colnames(pwaic_table) = seasons_strvec
+for (season in seasons_strvec){
+  X = read_data(season, league)
+  X1 = X[[1]]
+  X2 = X[[2]]
+  
+  for (n_run in 1){
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Pois_FullLeague//",league_acro,"_",season,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//CMP_FullLeague//",league_acro,"_",season,"_CMP.rds"))
+    
+    stopifnot(all(MH_P$team_names == rownames(X1)))
+    stopifnot(all(MH_SAS$team_names == rownames(X1)))
+    stopifnot(MH_P$att_fix_idx == MH_SAS$att_fix_idx)
+
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+    
+    lppd_table[1, season] = P_WAIC$lppd
+    lppd_table[2, season] = SAS_WAIC$lppd
+    lppd_table[3, season] = CMP_WAIC$lppd
+    
+    pwaic_table[1, season] = P_WAIC$p_waic
+    pwaic_table[2, season] = SAS_WAIC$p_waic
+    pwaic_table[3, season] = CMP_WAIC$p_waic
+  }
+}
+
+IC_table = -2*(lppd_table - pwaic_table)
+round(IC_table,1)
+```
+
+        2021   2122   2223   2324   2425
+    1 2296.4 2242.2 2286.1 2400.3 2312.8
+    2 2280.5 2236.4 2277.9 2370.0 2293.1
+    3 2290.1 2246.2 2287.5 2386.1 2305.6
+
+#### Table 7
+
+``` r
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+L = 1
+league_acro = league_acros[L]
+game_start = 191
+seas_start = 2020
+seas_end = 2025
+p_id = ''
+threshold = 0.50
+filter_code = 0
+
+outcome_oos = compute_outcome_eval(league_acro = league_acro, seas_start, seas_end, 'oos',
+                                   filter = filter_code, threshold = threshold)
+
+overunder_oos = compute_overunder_eval(league_acro = league_acro, seas_start, seas_end, overunder = 2.5, 'oos', 
+                                       filter = filter_code, threshold = threshold)
+
+gd_oos = compute_goaldiff_eval(league_acro = league_acro, seas_start, seas_end, 'oos', 
+                               filter = filter_code, threshold = threshold)
+
+out_table = round(rbind(outcome_oos[4:6,1:5], 
+                        overunder_oos[4:6,1:5], 
+                        gd_oos[4:6,1:5]),3)
+out_table
+```
+
+               2021  2122  2223  2324  2425
+    IGN-Pois  1.497 1.403 1.401 1.326 1.415
+    IGN-SAS   1.480 1.399 1.401 1.326 1.397
+    IGN-CMP   1.481 1.396 1.404 1.330 1.391
+    IGN-Pois1 1.019 1.063 0.961 0.974 1.025
+    IGN-SAS1  0.998 1.056 0.960 0.929 1.004
+    IGN-CMP1  0.997 1.064 0.967 0.925 1.011
+    IGN-Pois2 2.801 2.948 2.878 2.940 2.858
+    IGN-SAS2  2.796 2.936 2.861 2.937 2.845
+    IGN-CMP2  2.806 2.932 2.866 2.948 2.846

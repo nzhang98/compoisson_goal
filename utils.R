@@ -691,21 +691,6 @@ generate_league_sim_cp_d = function(att, def, home, nu,
   else{
     stopifnot(typeof(X1) == "double" && typeof(X2) == "double")
     print('not implemented!')
-    
-    
-    # X1_sim = X1
-    # X2_sim = X2
-    # for (i in 1:N){
-    #   for (j in 1:N){
-    #     if (inv_X_mid[i,j] == 0){next}
-    #     X1_sim[i,j] = rejection_sampler_draws(1, 
-    #                                           mu = exp(att[i] + def[j] + home),
-    #                                           nu = nu_home)
-    #     X2_sim[j,i] = rejection_sampler_draws(1, 
-    #                                           mu = exp(att[i] + def[j]),
-    #                                           nu = nu_away)
-    #   }
-    # }
   }
   return(list(X1_sim, X2_sim))
 }
@@ -775,322 +760,35 @@ sim_pair_results_compois = function(i, j, MH_object, id, n_sims = 10){
   return(heatmatrix)
 }
 
-compute_implied_probability = function(quotes){ #Distribute margin evenly across bets
-  book_margin = sum(1/quotes) - 1
-  implied_prob = (1/quotes)/(book_margin+1)
-  # print(book_margin)
-  return(list(implied_prob,
-              book_margin))
-}
-
-plot_heatmap = function(i, j, melt_mat, hometeam, awayteam, distr){
-  print(ggplot(melt_mat, aes(Var1, Var2)) +
-          geom_tile(aes(fill = round(value/sum(value),4)*100)) +
-          geom_text(aes(label = round(value/sum(value),4)*100)) +
-          scale_fill_gradient(low = "gray95", high = "red4", guide = 'none') +
-          scale_x_continuous("Home", labels = as.character(seq(0, 7)), breaks = seq(0, 7)) +
-          scale_y_continuous("Away", labels = as.character(seq(0, 7)), breaks = seq(0, 7)) +
-          labs(x = "Home", y = "Away", title = paste0(hometeam,"-",awayteam,", Result: ",X1[i,j],"-",X2[i,j],", ",distr," Model")))
-}
-
-create_bet = function(game_id,hometeam, awayteam, id_bet, quote, result, book_prob, pred_prob, book_margin){
-  bet = switch(as.character(id_bet), "1" = "1", "2" = "X", "3" = "2")
-  result = switch(result, "H" = "1", "D"="X", "A"="2")
-  out = setNames(list( game_id,
-                       hometeam,
-                       awayteam,
-                       quote,
-                       bet,
-                       result,
-                       bet == result,
-                       book_prob,
-                       pred_prob,
-                       pred_prob - book_prob,
-                       book_margin), 
-                 c("GameNumber","HomeTeam", "AwayTeam", "AvgQuote", "Bet", 
-                   "Result", "BetWin", "ImpliedProb","ModelProb","OurMargin","BookMargin"))
-  return(out)
-}
-
-bet_evaluator = function(df_row,stake){
-  if(df_row["BetWin"]){return(as.numeric(df_row["AvgQuote"])*(stake))}
-  else(return(-stake))
-}
-
-evaluate_games_prob = function(MH_object_P, MH_object_CP, game_id, id_sample, 
-                               bets = c("AvgH", "AvgD", "AvgA"), plot_heatmap_fl = FALSE, bet_margin = 0){
-  quotes = df_hist[t,bets]
-  implied_probability = compute_implied_probability(quotes)[[1]]
-  book_margin = compute_implied_probability(quotes)[[2]]
+plot_heatmap <- function(mat, title = "", x = NULL, y = NULL) {
+  df <- reshape2::melt((mat))
+  colnames(df) <- c("Away", "Home", "Odd")  # match orientation
   
-  hometeam = df_hist[t, "HomeTeam"]
-  awayteam = df_hist[t, "AwayTeam"]
-  result = df_hist[t, "FTR"]
-  i = get_team_code(hometeam)
-  j = get_team_code(awayteam)
+  df$Home <- df$Home - 1
+  df$Away <- df$Away - 1
   
-  m.hmat = sim_pair_results_pois(i, j, MH_object_P, id_sample)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "Poisson")}
+  p <- ggplot(df, aes(x = Home, y = Away, fill = Odd)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = round(Odd, 2)), size = 4, color = "black") +
+    scale_fill_gradient(low = "gray95", high = "red4", guide = 'none') +
+    scale_x_continuous(breaks = 0:7, name = "Home Goals") +
+    scale_y_continuous(breaks = 0:7, name = "Away Goals") +
+    coord_fixed(ratio = 0.7) +  # <- Make cells wider
+    labs(title = title) +
+    theme_minimal(base_size = 12)
   
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_P = c(home_prob, draw_prob, away_prob)
-  
-  df_bets_P = setNames(data.frame(matrix(ncol = 11, nrow = 0)), 
-                       c("GameNumber","HomeTeam", "AwayTeam", "AvgQuote", "Bet", 
-                         "Result", "BetWin", "ImpliedProb","ModelProb","OurMargin","BookMargin"))
-  diff1 = predicted_probabilities_P - implied_probability
-  idx_bets = which((predicted_probabilities_P/(1+book_margin)) - implied_probability > bet_margin)
-  for(id_bet in idx_bets){
-    bet = create_bet(game_id,hometeam, awayteam, id_bet, quotes[[id_bet]], result, 
-                     implied_probability[[id_bet]], predicted_probabilities_P[[id_bet]], book_margin)
-    df_bets_P = rbind(df_bets_P, bet)
+  # Add border for selected cell if x and y are provided
+  if (!is.null(x) && !is.null(y)) {
+    p <- p + geom_tile(
+      data = subset(df, Home == x & Away == y),
+      aes(x = Home, y = Away),
+      fill = NA, color = "black", size = 1.2
+    )
   }
-  
-  m.hmat = sim_pair_results_compois(i, j, MH_object_CP, id_sample)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "COM-Poisson")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_CP = c(home_prob, draw_prob, away_prob)
-  
-  df_bets_CP = setNames(data.frame(matrix(ncol = 11, nrow = 0)), 
-                        c("GameNumber","HomeTeam", "AwayTeam", "AvgQuote", "Bet", 
-                          "Result", "BetWin", "ImpliedProb","ModelProb","OurMargin","BookMargin"))
-  diff2 = predicted_probabilities_CP - implied_probability
-  # idx_bets = which(book_margin+bet_margin < diff2)
-  idx_bets = which((predicted_probabilities_CP/(1+book_margin)) - implied_probability > bet_margin)
-  for(id_bet in idx_bets){1
-    bet = create_bet(game_id,hometeam, awayteam, id_bet, quotes[[id_bet]], result, 
-                     implied_probability[[id_bet]], predicted_probabilities_CP[[id_bet]], book_margin)
-    df_bets_CP = rbind(df_bets_CP, bet)
-  }
-  
-  out_df = rbind(implied_probability, predicted_probabilities_P, predicted_probabilities_CP,
-                 diff1, diff2)
-  rownames(out_df) = c("BetAvg", "Poisson", "Com-Poisson", "Diff-P", "Diff-CP")
-  colnames(out_df) = c("Home", "Draw", "Away")
-  
-  out_list = list(probabilities = out_df,
-                  bets_P = df_bets_P,
-                  bets_CP = df_bets_CP)
-  return(out_list)
-}
-
-
-truncate_forecast = function(P, truncate_n = 2) {
-  n = nrow(P)
-  keep_n = n - truncate_n
-  
-  # Accumulate truncated rows and columns into last kept row/column
-  P[keep_n, 1:keep_n] = P[keep_n, 1:keep_n] + colSums(P[(keep_n+1):n, 1:keep_n])
-  P[1:keep_n, keep_n] = P[1:keep_n, keep_n] + rowSums(P[1:keep_n, (keep_n+1):n])
-  P[keep_n, keep_n] = P[keep_n, keep_n] + sum(P[(keep_n+1):n, (keep_n+1):n])
-  
-  # Return truncated matrix, normalized
-  # P[1:keep_n, 1:keep_n] / sum(P[1:keep_n, 1:keep_n])
-  return(P[1:keep_n, 1:keep_n])
-}
-
-safe_log = function(p, eps = 1e-15) {
-  p = pmax(p, eps)   
-  return(-log2(p))             
-}
-
-rotate_ccw = function(m) {
-  m[, ncol(m):1] |> t()
-}
-
-compute_goaldiff_probs = function(preds){
-  n = nrow(preds)
-  
-  # Initialize vector for goal difference probabilities
-  goal_diff_probs = numeric(2*n - 1)  # from +7 to -7 including 0
-  names(goal_diff_probs) =  (n-1): - (n-1)
-  
-  for (k in -(n-1):(n-1)) {
-    goal_diff_probs[as.character(k)] = sum(preds[row(preds) - col(preds) == -k])
-  }
-  
-  return(goal_diff_probs)
-}
-
-outcome_rps = function(probs, outcome) {
-  # probs: vector of length 3 with predicted probabilities
-  # outcome: observed outcome (1, 2, or 3)
-  
-  K = length(probs)
-  # Cumulative predicted probabilities
-  cum_probs = cumsum(probs)
-  
-  # Cumulative observed outcome vector
-  outcome_vec = rep(0, K)
-  outcome_vec[outcome] = 1
-  cum_obs = cumsum(outcome_vec)
-  
-  # Compute RPS
-  score = sum((cum_probs[-K] - cum_obs[-K])^2) / (K - 1)
-  return(score)
-}
-
-gd_rps = function(probs, cum_obs){
-  K = length(probs)
-  
-  cum_probs = cumsum(probs)
-  
-  score = sum((cum_probs[-K] - cum_obs[-K])^2) / (K - 1)
-  return(score)
-}
-
-ES_rps2d = function(P, ag_true, hg_true) {
-  # P: predicted probability matrix (rows=x, cols=y)
-  # x_true, y_true: true outcome coordinates (row, col)
-  
-  nrow_P = nrow(P)
-  ncol_P = ncol(P)
-  
-  # Observed outcome matrix
-  O = matrix(0, nrow=nrow_P, ncol=ncol_P)
-  O[ag_true, hg_true] = 1
-  
-  # Initialize cumulative matrices
-  F_cum = O_cum = matrix(0, nrow=nrow_P, ncol=ncol_P)
-  
-  for(i in 1:nrow_P) {
-    for(j in 1:ncol_P) {
-      F_cum[i,j] = sum(P[1:i, 1:j])
-      O_cum[i,j] = sum(O[1:i, 1:j])
-    }
-  }
-  
-  # 2D cumulative RPS score
-  score = sum((F_cum - O_cum)^2) / ((nrow_P - 1) * (ncol_P - 1))
-  
-  return(score)
-}
-
-# Manhattan-distance 2D score
-ES_rps2d_manhattan = function(P, ag_true, hg_true, exponent=2) {
-  # P: predicted probability matrix (rows=x, cols=y)
-  # x_true, y_true: true outcome coordinates (row, col)
-  # exponent: power applied to distance (default squared)
-  
-  nrow_P = nrow(P)
-  ncol_P = ncol(P)
-  
-  # Coordinates matrices
-  x_coords = matrix(rep(1:nrow_P, times=ncol_P), nrow=nrow_P)
-  y_coords = matrix(rep(1:ncol_P, each=nrow_P), nrow=nrow_P)
-  
-  # Manhattan distance from true outcome
-  manhattan_dist = abs(x_coords - ag_true) + abs(y_coords - hg_true)
-  
-  # Weighted score
-  score = sum(P * (manhattan_dist^exponent))
-  
-  return(score)
-}
-
-simulation_league_posterior = function(MH_object, id, distr_type){
-  att_sample = MH_object$att_post[id]
-  def_sample = MH_object$def_post[id]
-  home_sample = MH_object$home_post[id]
-  n = length(id)
-  # if(MH_object$distr_type == 'poisson'){
-  points = data.frame(matrix(ncol=20, nrow=0))
-  if(distr_type == 'P'){
-    league_sim = generate_league_sim_p(att_sample[[1]] + att_fix, def_sample[[1]] + def_fix, home_sample[1])
-    points = evaluate_standings_league(league_sim)
-    for (s in 2:n){
-      league_sim = generate_league_sim_p(att_sample[[s]] + att_fix, def_sample[[s]] + def_fix, home_sample[s])
-      points_sim = evaluate_standings_league(league_sim)
-      points = rbind(points, points_sim)
-    }
-  }
-  # if(MH_object$distr_type == 'com_poisson'){
-  if(distr_type == 'CP'){
-    nu_home_sample = MH_object$nu_home_post[id]
-    nu_away_sample = MH_object$nu_away_post[id]
-    
-    league_sim = generate_league_sim_cp(att_sample[[1]] + att_fix, def_sample[[1]] + def_fix,
-                                        home_sample[1], nu_home = nu_home_sample[1], nu_away = nu_away_sample[1])
-    points = evaluate_standings_league(league_sim)
-    for (s in 2:n){
-      league_sim = generate_league_sim_cp(att_sample[[s]] + att_fix, def_sample[[s]] + def_fix, 
-                                          home_sample[s], nu_home = nu_home_sample[s], nu_away = nu_away_sample[s])
-      points_sim = evaluate_standings_league(league_sim)
-      points = rbind(points, points_sim)
-    }
-  }
-  return(points)
-}
-
-generate_ci_plot_comparison = function(X, MH_obj_P, MH_obj_CP, id_sample, text_main = "", quantiles = c(0.1, 0.5, 0.9)){
-  post_points_P = simulation_league_posterior(MH_obj_P, id_sample, 'P')
-  post_points_CP = simulation_league_posterior(MH_obj_CP, id_sample, 'CP')
-  
-  # print(post_points_P)
-  
-  true_points = sort(evaluate_standings_league(X), decreasing = TRUE)
-  names_standings = names(true_points)
-  # print(names_standings)
-  lower_ci = numeric(20)
-  upper_ci = numeric(20)
-  mode = numeric(20)
-  
-  lower_ci_cp = numeric(20)
-  upper_ci_cp = numeric(20)
-  mode_cp = numeric(20)
-  for(i in 1:20){
-    quants = quantile(post_points_P[,names_standings[i]], probs = quantiles)
-    lower_ci[i] = quants[1]
-    upper_ci[i] = quants[3]
-    mode[i] = Mode(post_points_P[,names_standings[i]])
-    
-    quants = quantile(post_points_CP[,names_standings[i]], probs = quantiles)
-    lower_ci_cp[i] = quants[1]
-    upper_ci_cp[i] = quants[3]
-    mode_cp[i] = Mode(post_points_CP[,names_standings[i]])
-  }
-  
-  df_plot = data.frame(team = names_standings, 
-                       true_points = true_points, 
-                       lower_ci = lower_ci, 
-                       lower_ci_cp = lower_ci_cp,
-                       upper_ci = upper_ci,
-                       upper_ci_cp = upper_ci_cp,
-                       mode = mode,
-                       mode_cp = mode_cp)
-  df_plot$team = factor(df_plot$team, levels = df_plot$team)
-  
-  p = ggplot(df_plot) +
-    geom_point(aes(y = as.numeric(team) + 0.2, x = mode), color = "blue") +       # First set of points
-    geom_errorbarh(aes(y = as.numeric(team) + 0.2, xmin = lower_ci, xmax = upper_ci), 
-                   height = 0.2, color = "blue") +                                        # First set of error bars
-    geom_point(aes(y = as.numeric(team) - 0.2, x = mode_cp), color = "red") +        # Second set of points
-    geom_errorbarh(aes(y = as.numeric(team) - 0.2, xmin = lower_ci_cp, xmax = upper_ci_cp), 
-                   height = 0.2, color = "red") +  
-    geom_point(aes(y = as.numeric(team) + 0.2, x = true_points)) +
-    geom_point(aes(y = as.numeric(team) - 0.2, x = true_points)) +# Second set of error bars
-    scale_y_continuous(breaks = 1:20, labels = levels(df_plot$team)) +                      # Correct y-axis labels
-    labs(title = paste("CI for final Points", text_main),
-         x = "Points",
-         y = "Team") +                                                                    # Add labels
-    coord_cartesian(xlim = c(0, 105)) +
-    theme_minimal()  
   
   return(p)
 }
+
 
 plot_MCMC_diagnostics = function(MH_object_par, cols = 1:5, bins = 30) {
   n = length(cols)
@@ -1127,151 +825,6 @@ plot_MCMC_diagnostics_series = function(par1, par2 , cols = 1:5) {
          xlab = "Iteration", ylab = "Value")
     abline(h = 1, col = "red2", lty = "dashed", lwd = 1)
   }
-}
-
-### Functions to retrieve results from MH objects
-
-simulate_game_probs = function(MH_object_P, MH_object_CP, game_id, id_sample, df_hist, n_sims = 1,
-                               plot_heatmap_fl = FALSE){
-  
-  hometeam = df_hist[game_id, "HomeTeam"]
-  awayteam = df_hist[game_id, "AwayTeam"]
-  result = df_hist[game_id, c("FTHG", "FTAG", "FTR", "HomeTeam", "AwayTeam")]
-  i = get_team_code(hometeam)
-  j = get_team_code(awayteam)
-  
-  m.hmat = sim_pair_results_pois(i, j, MH_object_P, id_sample, n_sims)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "Poisson")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  
-  freq_mat_P = freq_mat
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_P = c(home_prob, draw_prob, away_prob)
-  
-  m.hmat = sim_pair_results_compois(i, j, MH_object_CP, id_sample, n_sims)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "COM-Poisson")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  freq_mat_CP = freq_mat
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_CP = c(home_prob, draw_prob, away_prob)
-  
-  out_df = rbind(predicted_probabilities_P, predicted_probabilities_CP)
-  
-  out_list = list(probabilities = out_df,
-                  freq_P = freq_mat_P,
-                  freq_CP = freq_mat_CP,
-                  result = result)
-  return(out_list)
-}
-
-simulate_game_probs_d = function(MH_object_P, MH_object_CP, MH_object_CPd, game_id, id_sample, df_hist, n_sims = 1,
-                                 plot_heatmap_fl = FALSE){
-  
-  hometeam = df_hist[game_id, "HomeTeam"]
-  awayteam = df_hist[game_id, "AwayTeam"]
-  result = df_hist[game_id, c("FTHG", "FTAG", "FTR", "HomeTeam", "AwayTeam")]
-  i = get_team_code(hometeam)
-  j = get_team_code(awayteam)
-  
-  m.hmat = sim_pair_results_pois(i, j, MH_object_P, id_sample, n_sims)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "Poisson")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  
-  freq_mat_P = freq_mat
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_P = c(home_prob, draw_prob, away_prob)
-  
-  m.hmat = sim_pair_results_compois(i, j, MH_object_CP, id_sample, n_sims)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "COM-Poisson")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  
-  freq_mat_CP = freq_mat
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_CP = c(home_prob, draw_prob, away_prob)
-  
-  m.hmat = sim_pair_results_compois(i, j, MH_object_CPd, id_sample, n_sims)
-  melt_mat = m.hmat[[1]]
-  if(plot_heatmap_fl){plot_heatmap(i, j, melt_mat, hometeam, awayteam, "COM-Poisson-ID")}
-  
-  freq_mat = m.hmat[[2]]
-  freq_mat = freq_mat/(sum(freq_mat))
-  freq_mat_CPd = freq_mat
-  
-  home_prob = sum(freq_mat[lower.tri(freq_mat)])
-  away_prob = sum(freq_mat[upper.tri(freq_mat)])
-  draw_prob = sum(diag(freq_mat))
-  predicted_probabilities_CPd = c(home_prob, draw_prob, away_prob)
-  
-  out_df = rbind(predicted_probabilities_P, predicted_probabilities_CP,predicted_probabilities_CPd)
-  
-  out_list = list(probabilities = out_df,
-                  freq_P = freq_mat_P,
-                  freq_CP = freq_mat_CP,
-                  freq_CPd = freq_mat_CPd,
-                  result = result)
-  return(out_list)
-}
-
-compute_scores_match = function(df_prob){
-  hg = min(df_prob$result[[1]], 7)
-  ag = min(df_prob$result[[2]], 7)
-  result_to_index = list('H' = 1, 'D' = 2, 'A' = 3)
-  res_idx = result_to_index[[df_prob$result[[3]]]]
-  
-  df_result_prob = df_prob[[1]]
-  
-  p_result_prob = df_result_prob[[1, res_idx]]
-  p_probs = df_prob[[2]]
-  
-  p_exact_prob = p_probs[hg+1, ag+1]
-  p_probs[hg+1, ag+1] = p_probs[hg+1, ag+1] - 1
-  p_exact_brier = sum(p_probs**2)
-  
-  cp_result_prob = df_result_prob[[2, res_idx]]
-  cp_probs = df_prob[[3]]
-  
-  cp_exact_prob = cp_probs[hg+1, ag+1]
-  cp_probs[hg+1, ag+1] = cp_probs[hg+1, ag+1] - 1
-  cp_exact_brier = sum(cp_probs**2)
-  
-  df_result_prob[,res_idx] = df_result_prob[,res_idx] - 1
-  p_result_brier = rowSums(df_result_prob**2)[[1]]
-  cp_result_brier = rowSums(df_result_prob**2)[[2]]
-  
-  out_list = list(result_prob_P = p_result_prob,
-                  result_prob_CP = cp_result_prob,
-                  result_brier_P = p_result_brier,
-                  result_brier_CP = cp_result_brier,
-                  exact_prob_P = p_exact_prob,
-                  exact_prob_CP = cp_exact_prob,
-                  exact_brier_P = p_exact_brier,
-                  exact_brier_CP = cp_exact_brier)
-  
-  return(out_list)
 }
 
 #### WAIC
@@ -1372,24 +925,19 @@ eval_WAIC_cmp = function(X, att, def, home, nu){
       nu_away = nu[,j]
       
       log_llhood_home = eval_cmp_llhood_cmp_vec(X1[i,j], mu_home, nu_home)
-      # lppd_home = log(mean(exp(log_llhood_home)))
       p_waic_home = var(log_llhood_home)
       
       log_llhood_away = eval_cmp_llhood_cmp_vec(X2[i,j], mu_away, nu_away)
-      # lppd_away = log(mean(exp(log_llhood_away)))
       p_waic_away = var(log_llhood_away)
       
       lppd_home = log_sum_exp(log_llhood_home)
       lppd_away = log_sum_exp(log_llhood_away)
       
       
-      # WAIC[i,j] = (lppd_home - p_waic_home) + (lppd_away - p_waic_away)
       lppd[i,j] = lppd_home + lppd_away
       p_waic[i,j] = p_waic_home + p_waic_away
     }
   }
-  # return(WAIC)
-  # return(-2*sum(WAIC, na.rm = TRUE))
   return(list(lppd = sum(lppd, na.rm = TRUE),
               p_waic = sum(p_waic, na.rm = TRUE)))
 }
@@ -1401,7 +949,6 @@ eval_WAIC_pois = function(X, att, def, home){
   X2 = X[[2]]
   N = nrow(X1)
   
-  # WAIC = matrix(NA_real_, N, N)
   lppd = matrix(NA_real_, N, N)
   p_waic = matrix(NA_real_, N, N)
   
@@ -1414,26 +961,20 @@ eval_WAIC_pois = function(X, att, def, home){
       lam_away = exp(att[,j] + def[,i])
       
       log_llhood_home = dpois(X1[i,j], lam_home, log = TRUE)
-      # lppd_home = log(mean(exp(log_llhood_home)))
       p_waic_home = var(log_llhood_home)
       
       log_llhood_away = dpois(X2[i,j], lam_away, log = TRUE)
-      # lppd_away = log(mean(exp(log_llhood_away)))
       p_waic_away = var(log_llhood_away)
       
       lppd_home = log_sum_exp(log_llhood_home)
       lppd_away = log_sum_exp(log_llhood_away)
       
       
-      # WAIC[i,j] = (lppd_home - p_waic_home) + (lppd_away - p_waic_away)
       lppd[i,j] = lppd_home + lppd_away
       p_waic[i,j] = p_waic_home + p_waic_away
     }
   }
   
-  # return(WAIC)
-  
-  # return(-2*sum(WAIC, na.rm = TRUE))
   return(list(lppd = sum(lppd, na.rm = TRUE),
               p_waic = sum(p_waic, na.rm = TRUE)))
 } 
@@ -1455,7 +996,6 @@ truncate_forecast = function(P, truncate_n = 2) {
   P[keep_n, keep_n] = P[keep_n, keep_n] + sum(P[(keep_n+1):n, (keep_n+1):n])
   
   # Return truncated matrix, normalized
-  # P[1:keep_n, 1:keep_n] / sum(P[1:keep_n, 1:keep_n])
   return(P[1:keep_n, 1:keep_n])
 }
 
@@ -1730,6 +1270,7 @@ compute_goaldiff_eval = function(league_acro, season_start, season_end,
   
   rownames(table_summ) = c('RPS-Pois', 'RPS-SAS', 'RPS-CMP', 'IGN-Pois', 'IGN-SAS', 'IGN-CMP')
   table_summ = cbind(table_summ, setNames(data.frame(rowMeans(table_summ, na.rm = TRUE)), "Means"))
+  return(table_summ)
 }
 
 compute_overunder_eval = function(league_acro, season_start, season_end, overunder = 2.5,
@@ -1813,4 +1354,5 @@ compute_overunder_eval = function(league_acro, season_start, season_end, overund
   
   rownames(table_summ) = c('RPS-Pois', 'RPS-SAS', 'RPS-CMP', 'IGN-Pois', 'IGN-SAS', 'IGN-CMP')
   table_summ = cbind(table_summ, setNames(data.frame(rowMeans(table_summ, na.rm = TRUE)), "Means"))
+  return(table_summ)
 }

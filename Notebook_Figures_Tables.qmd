@@ -2,6 +2,9 @@
 title: "Figures and Tables - Notebook"
 format: gfm
 editor: visual
+execute: 
+  warning: false
+  message: false
 ---
 
 ## Notebook
@@ -13,6 +16,14 @@ This notebook reproduces all figures and tables in the paper
 ```{r load}
 source('utils.R') # Contains all utility functions to support modelling and analysis, including functions to import/export data, manipulate the MH_posterior objects from the MCMC routines, and generate predictions
 library(patchwork)
+library(ggrepel)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(cowplot)
+library(ggridges)
+library(forcats)
+library(kableExtra)
 mcmc_out_dir = "Data/MCMC_Outputs/"
 ```
 
@@ -221,7 +232,7 @@ p1+p2
 
 ##### Figure 3
 
-```{r}
+```{r fig3}
 nus_overdispersed = seq(0.2, 0.90, by = 0.1)
 n_seeds = 5
 threshold = 0.5
@@ -405,7 +416,7 @@ p_od / p_ud
 
 ##### Table 1
 
-```{r}
+```{r tab1}
 out_table = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
             c(colMeans(od_sign_nd), colMeans(ud_sign_nd)))
 
@@ -414,7 +425,7 @@ out_table
 
 ##### Table 2
 
-```{r}
+```{r tab2}
 n_samples = 5000
 n_seeds = 3
 
@@ -422,10 +433,8 @@ disp_vec = c(0.3, 0.6, 0.9, 1.2, 2, 4)
 
 waic_table = data.frame(matrix(NA_real_, nrow = 3, 3*length(disp_vec)))
 colnames(waic_table) = rep(disp_vec, each = 3)
-colnames(loo_table) = rep(disp_vec, each = 3)
 col_idx = 1
 for (nu_scalar in disp_vec){
-  print(nu_scalar)
   loo_list = vector("list", 3)
   waic_list = vector("list", 3)
   
@@ -459,8 +468,6 @@ waic_table
 ##### Figure 6
 
 ```{r fig6}
-library(ggridges)
-library(forcats)
 league_acro = 'PL'
 season = '2324'
 MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
@@ -608,13 +615,7 @@ p2+p3
 
 ##### Att and Mean scatter plot comparison
 
-```{r}
-library(ggrepel)
-library(ggplot2)
-library(gridExtra)
-library(grid)
-library(cowplot)
-
+```{r fig7}
 league_acro = 'PL'
 season = '2324'
 
@@ -742,7 +743,6 @@ final_plot
 ##### Table 3
 
 ```{r tab3}
-library(kableExtra)
 league_acro = 'PL'
 season = '2324'
 
@@ -802,4 +802,190 @@ table3 = kable(
 
 table3
 
+df_home_mu = c(pois_pars[1], sas_pars[1])
+df_home_sd = c(sd(MH_P$home_post[(t/5):t]), sd(MH_SAS$home_post[(t/5):t]))
+
+rbind(df_home_mu,df_home_sd)
 ```
+
+#### Table 4
+
+```{r tab4}
+n_samples = 5000
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
+
+L = 1
+league = leagues[L]
+league_acro = league_acros[L]
+
+seasons_strvec = generate_season_string(2023, 2024)
+n_seeds = 1
+
+set.seed(1)
+IC_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+lppd_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+pwaic_table = data.frame(matrix(NA_real_, nrow = 1, length(seasons_strvec)))
+colnames(IC_table) = seasons_strvec
+colnames(lppd_table) = seasons_strvec
+colnames(pwaic_table) = seasons_strvec
+for (season in seasons_strvec){
+  X = read_data(season, league)
+  X1 = X[[1]]
+  X2 = X[[2]]
+  
+  for (n_run in 1){
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Pois_FullLeague//",league_acro,"_",season,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//CMP_FullLeague//",league_acro,"_",season,"_CMP.rds"))
+    
+    stopifnot(all(MH_P$team_names == rownames(X1)))
+    stopifnot(all(MH_SAS$team_names == rownames(X1)))
+    stopifnot(MH_P$att_fix_idx == MH_SAS$att_fix_idx)
+
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+    
+    lppd_table[1, season] = P_WAIC$lppd
+    lppd_table[2, season] = SAS_WAIC$lppd
+    lppd_table[3, season] = CMP_WAIC$lppd
+    
+    pwaic_table[1, season] = P_WAIC$p_waic
+    pwaic_table[2, season] = SAS_WAIC$p_waic
+    pwaic_table[3, season] = CMP_WAIC$p_waic
+  }
+}
+
+IC_table = -2*(lppd_table - pwaic_table)
+round(cbind(lppd_table, pwaic_table, IC_table),1)
+
+```
+
+#### Figure 8
+
+```{r fig8}
+league_acro = 'PL'
+season = '2324'
+df_hist = read_historics(season, league_acro)
+game_id = 254
+
+row_hist = df_hist[game_id, ]
+ht = row_hist[['HomeTeam']]
+at = row_hist[['AwayTeam']]
+hg = row_hist[['FTHG']]
+ag = row_hist[['FTAG']]
+
+sas_preds = readRDS(file = paste0("Data//Predictions//",league_acro,season,"_SAS_oos.rds"))
+
+sas_mat = sas_preds$list_preds[[game_id]]
+
+sas_heatplot = plot_heatmap(sas_mat, "CMP-SAS Model", x = as.numeric(hg), y = as.numeric(ag))
+
+
+pois_preds = readRDS(file = paste0("Data//Predictions//",league_acro,season,"_Pois_oos.rds"))
+
+pois_mat = pois_preds$list_preds[[game_id]]
+pois_heatplot = plot_heatmap(pois_mat, "Poisson Model",x = as.numeric(hg), y = as.numeric(ag))
+
+combined_plot = (pois_heatplot | plot_spacer() | sas_heatplot) +
+  plot_layout(widths = c(1, 0, 1)) +
+  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", Premier League ", season, ", Out of sample prediction % probabilities"))
+
+sas_prob = c(sum(sas_mat[upper.tri(sas_mat)]),
+             sum(diag(sas_mat)),
+             sum(sas_mat[lower.tri(sas_mat)]))
+pois_prob = c(sum(pois_mat[upper.tri(pois_mat)]),
+              sum(diag(pois_mat)),
+              sum(pois_mat[lower.tri(pois_mat)]))
+
+combined_plot 
+
+rbind(c('HomeWin', 'Draw', 'AwayWin'),
+      sas_prob,
+      pois_prob)
+```
+
+#### Table 6
+```{r tab6}
+n_samples = 5000
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+
+leagues = c('Premier', 'SerieA', 'Liga', 'Ligue', 'Bundes', 'WSL')
+
+L = 1
+league = leagues[L]
+league_acro = league_acros[L]
+
+seasons_strvec = generate_season_string(2020, 2025)
+n_seeds = 1
+
+set.seed(1)
+IC_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+lppd_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+pwaic_table = data.frame(matrix(NA_real_, nrow = 3, length(seasons_strvec)))
+colnames(IC_table) = seasons_strvec
+colnames(lppd_table) = seasons_strvec
+colnames(pwaic_table) = seasons_strvec
+for (season in seasons_strvec){
+  X = read_data(season, league)
+  X1 = X[[1]]
+  X2 = X[[2]]
+  
+  for (n_run in 1){
+    MH_P = readRDS(file = paste0("Data//MCMC_Outputs//Pois_FullLeague//",league_acro,"_",season,"_Pois.rds"))
+    MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+    MH_CMP = readRDS(file = paste0("Data//MCMC_Outputs//CMP_FullLeague//",league_acro,"_",season,"_CMP.rds"))
+    
+    stopifnot(all(MH_P$team_names == rownames(X1)))
+    stopifnot(all(MH_SAS$team_names == rownames(X1)))
+    stopifnot(MH_P$att_fix_idx == MH_SAS$att_fix_idx)
+
+    P_WAIC = evaluate_WAIC(X, MH_P, n_samples)
+    SAS_WAIC = evaluate_WAIC(X, MH_SAS, n_samples)
+    CMP_WAIC = evaluate_WAIC(X, MH_CMP, n_samples)
+    
+    lppd_table[1, season] = P_WAIC$lppd
+    lppd_table[2, season] = SAS_WAIC$lppd
+    lppd_table[3, season] = CMP_WAIC$lppd
+    
+    pwaic_table[1, season] = P_WAIC$p_waic
+    pwaic_table[2, season] = SAS_WAIC$p_waic
+    pwaic_table[3, season] = CMP_WAIC$p_waic
+  }
+}
+
+IC_table = -2*(lppd_table - pwaic_table)
+round(IC_table,1)
+```
+
+#### Table 7
+
+```{r tab7}
+league_acros = c('PL', 'SA', 'LL', 'LC', 'BL', 'WSL')
+L = 1
+league_acro = league_acros[L]
+game_start = 191
+seas_start = 2020
+seas_end = 2025
+p_id = ''
+threshold = 0.50
+filter_code = 0
+
+outcome_oos = compute_outcome_eval(league_acro = league_acro, seas_start, seas_end, 'oos',
+                                   filter = filter_code, threshold = threshold)
+
+overunder_oos = compute_overunder_eval(league_acro = league_acro, seas_start, seas_end, overunder = 2.5, 'oos', 
+                                       filter = filter_code, threshold = threshold)
+
+gd_oos = compute_goaldiff_eval(league_acro = league_acro, seas_start, seas_end, 'oos', 
+                               filter = filter_code, threshold = threshold)
+
+out_table = round(rbind(outcome_oos[4:6,1:5], 
+                        overunder_oos[4:6,1:5], 
+                        gd_oos[4:6,1:5]),3)
+out_table
+```
+
+
