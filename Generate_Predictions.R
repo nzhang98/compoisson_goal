@@ -342,9 +342,9 @@ for(L in 1){
   n_samples = 5000
   
   if (league_acro == 'LC' && season == '1920'){next}
-  
-  #list_preds = sim_halfleague_results_sas(season, league_acro, m = m, n_samples = n_samples)
-  #list_preds = sim_halfleague_results_pois(season, league_acro, m = m, n_samples = n_samples)
+  # 
+  # list_preds = sim_halfleague_results_sas(season, league_acro, m = m, n_samples = n_samples)
+  # list_preds = sim_halfleague_results_pois(season, league_acro, m = m, n_samples = n_samples)
   list_preds = sim_halfleague_results_cmp(season, league_acro, m = m, n_samples = n_samples)
   
   
@@ -366,7 +366,7 @@ for(L in 1){
     list_preds = list_preds)
   # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_Pois_oos.rds"))
   # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_SAS_oos.rds"))
-  # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_CMP_oos.rds"))
+  saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_CMP_oos.rds"))
   # 
   # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_Pois_insample.rds"))
   # saveRDS(predictions, file = paste0("Data/Predictions/",league_acro, season,"_SAS_insample.rds"))
