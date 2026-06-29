@@ -24,128 +24,13 @@ library(cowplot)
 library(ggridges)
 library(forcats)
 library(kableExtra)
+library(knitr)
 mcmc_out_dir = "Data/MCMC_Outputs/"
-```
-
-##### Figure 1
-
-```{r fig1}
-
-X = read_data('2324', 'Premier')
-X1 = X[[1]]
-X2 = X[[2]]
-
-# Remove diagonals
-X1_nodiag = X1[upper.tri(X1) | lower.tri(X1)]
-X2_nodiag = X2[upper.tri(X2) | lower.tri(X2)]
-
-# Truncate values > 7
-X1_nodiag = X1_nodiag[X1_nodiag <= 7]
-X2_nodiag = X2_nodiag[X2_nodiag <= 7]
-
-# Convert to factors for exact bins 0 to 7
-X1_factor = factor(X1_nodiag, levels = 0:7)
-X2_factor = factor(X2_nodiag, levels = 0:7)
-
-# Calculate means for vertical lines
-mean_X1 = mean(as.numeric(as.character(X1_factor)))
-mean_X2 = mean(as.numeric(as.character(X2_factor)))
-var_X1 = var(as.numeric(as.character(X1_factor)))
-var_X2 = var(as.numeric(as.character(X2_factor)))
-
-# Create individual plots
-
-p1 = ggplot(data.frame(value = X1_factor), aes(x = value)) +
-  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
-  geom_vline(xintercept = mean_X1 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
-  geom_vline(xintercept = var_X1 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
-  scale_x_discrete(drop = FALSE) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  labs(x = "Home Goals Scored", y = "Number of Matches") +
-  theme_minimal() +
-  theme(
-    axis.title.x = element_text(size = 12),
-    axis.title.y = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    plot.margin = margin(t = 5, r = 10, b = 5, l = 5)
-  )
-
-p2 = ggplot(data.frame(value = X2_factor), aes(x = value)) +
-  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
-  geom_vline(xintercept = mean_X2 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
-  geom_vline(xintercept = var_X2 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
-  scale_x_discrete(drop = FALSE) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  labs(x = "Away Goals Scored", y = NULL) +
-  theme_minimal() +
-  theme(
-    axis.title.x = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    axis.ticks.y = element_blank(),
-    axis.text.y = element_blank(),
-    plot.margin = margin(t = 5, r = 5, b = 5, l = 10)
-  )
-
-# Get max y-axis limit to sync y scales
-max_y = max(ggplot_build(p1)$data[[1]]$count, ggplot_build(p2)$data[[1]]$count)
-
-# Fix y-axis limits to be the same
-p1 = p1 + coord_cartesian(ylim = c(0, max_y))
-p2 = p2 + coord_cartesian(ylim = c(0, max_y))
-
-# Combine with patchwork, add space between plots
-combined_plot = p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1)) & 
-  theme(plot.margin = margin(10, 10, 10, 10)) 
-
-print(combined_plot)
 ```
 
 ##### Figure 2
 
 ```{r fig2}
-season = '2324'
-league_acro = 'PL'
-league = 'Premier'
-
-X = read_data(season, league)
-X1 = X[[1]]
-X2 = X[[2]]
-
-df_hist = read_historics(season, league_acro)
-team_names = sort(unique(df_hist[,"HomeTeam"]))
-N = length(team_names)
-rownames(X1) = team_names
-rownames(X2) = team_names
-team_codes = setNames(1:N, team_names)
-
-plots = list()
-for (j in 1:N){
-  goals = unname(append(X1[j,],X2[,j]))
-  goals = goals[!is.na(goals)]
-  
-  if (mean(goals)/var(goals) > 1){disp_color = '#D55E00'}else{disp_color = '#009E73'}
-  
-  mean_goals = mean(goals)
-  var_goals = var(goals)
-  
-  p = ggplot(data.frame(goals), aes(x = goals)) +
-    coord_cartesian(xlim=c(0,7), ylim=c(0,15)) +
-    geom_histogram(binwidth = 1, fill = disp_color, color = 'black') +
-    geom_vline(xintercept = mean_goals, linetype = "solid", color = "#0072B2", linewidth = 0.8) +
-    geom_vline(xintercept = var_goals, linetype = "dashed", color = "#8E44AD", linewidth = 0.6) +
-    theme_minimal() +
-    theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
-    ggtitle(paste(team_names[j]))
-  
-  plots[[j]] = p
-}
-
-do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
-```
-
-##### Figure 4
-
-```{r fig4}
 compute_Z = function(mu, nu, j_max = 100) {
   j = 0:j_max
   terms = (mu^(nu * j)) / (factorial(j)^nu)
@@ -270,7 +155,7 @@ for (nu_scalar in nus_overdispersed){
     
     {
       nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
-      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      # included = as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
       included = as.integer(nu_summ[1,] >= threshold)
       
       vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
@@ -285,16 +170,16 @@ for (nu_scalar in nus_overdispersed){
   significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
 }
 
-df1 <- as.data.frame(big_Z_nd)
-df2 <- as.data.frame(big_Z_ed)
+df1 = as.data.frame(big_Z_nd)
+df2 = as.data.frame(big_Z_ed)
 
-df1$ID <- 1:nrow(df1)
-df2$ID <- 1:nrow(df2)
-df1$Group <- "Overdispersed"
-df2$Group <- "Equidispersed"
-df_long <- bind_rows(df1, df2)
+df1$ID = 1:nrow(df1)
+df2$ID = 1:nrow(df2)
+df1$Group = "Overdispersed"
+df2$Group = "Equidispersed"
+df_long = bind_rows(df1, df2)
 
-df_long <- pivot_longer(
+df_long = pivot_longer(
   df_long,
   cols = all_of(as.character(nus_overdispersed)),
   names_to = "Variable",
@@ -358,7 +243,7 @@ for (nu_scalar in nus_underdispersed){
     
     {
       nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
-      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      # included = as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
       included = as.integer(nu_summ[1,] >= threshold)
       
       vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
@@ -373,16 +258,16 @@ for (nu_scalar in nus_underdispersed){
   significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
 }
 
-df1 <- as.data.frame(big_Z_nd)
-df2 <- as.data.frame(big_Z_ed)
+df1 = as.data.frame(big_Z_nd)
+df2 = as.data.frame(big_Z_ed)
 
-df1$ID <- 1:nrow(df1)
-df2$ID <- 1:nrow(df2)
-df1$Group <- "Underdispersed"
-df2$Group <- "Equidispersed"
-df_long <- bind_rows(df1, df2)
+df1$ID = 1:nrow(df1)
+df2$ID = 1:nrow(df2)
+df1$Group = "Underdispersed"
+df2$Group = "Equidispersed"
+df_long = bind_rows(df1, df2)
 
-df_long <- pivot_longer(
+df_long = pivot_longer(
   df_long,
   cols = all_of(as.character(nus_underdispersed)),
   names_to = "Variable",
@@ -417,10 +302,11 @@ p_od / p_ud
 ##### Table 1
 
 ```{r tab1}
-out_table = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
+out_table1 = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
             c(colMeans(od_sign_nd), colMeans(ud_sign_nd)))
 
-out_table
+rownames(out_table1) = c("FP", "TP")
+knitr::kable(out_table1)
 ```
 
 ##### Table 2
@@ -460,14 +346,56 @@ for (nu_scalar in disp_vec){
   }
 }
 
-waic_table
+rownames(waic_table) = c("Poisson", "CMP-SAS", "CMP-Full")
+knitr::kable(waic_table)
 ```
 
+##### Figure 4
 
+```{r fig4}
+season = '2324'
+league_acro = 'PL'
+league = 'Premier'
 
-##### Figure 6
+X = read_data(season, league)
+X1 = X[[1]]
+X2 = X[[2]]
 
-```{r fig6}
+df_hist = read_historics(season, league_acro)
+team_names = sort(unique(df_hist[,"HomeTeam"]))
+N = length(team_names)
+rownames(X1) = team_names
+rownames(X2) = team_names
+team_codes = setNames(1:N, team_names)
+
+plots = list()
+for (j in 1:N){
+  goals = unname(append(X1[j,],X2[,j]))
+  goals = goals[!is.na(goals)]
+  
+  if (mean(goals)/var(goals) > 1){disp_color = '#D55E00'}else{disp_color = '#009E73'}
+  
+  mean_goals = mean(goals)
+  var_goals = var(goals)
+  
+  p = ggplot(data.frame(goals), aes(x = goals)) +
+    coord_cartesian(xlim=c(0,7), ylim=c(0,15)) +
+    geom_histogram(binwidth = 1, fill = disp_color, color = 'black') +
+    geom_vline(xintercept = mean_goals, linetype = "solid", color = "#0072B2", linewidth = 0.8) +
+    geom_vline(xintercept = var_goals, linetype = "dashed", color = "#8E44AD", linewidth = 0.6) +
+    theme_minimal() +
+    theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+    ggtitle(paste(team_names[j]))
+  
+  plots[[j]] = p
+}
+
+do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
+```
+
+##### Figure 5
+
+```{r fig5}
 league_acro = 'PL'
 season = '2324'
 MH_object = readRDS(paste0(mcmc_out_dir, "SAS_FullLeague/", league_acro, "_", season, "_SAS.rds"))
@@ -611,11 +539,11 @@ p2+p3
 
 ```
 
-##### Figure 7
+##### Figure 6
 
 ##### Att and Mean scatter plot comparison
 
-```{r fig7}
+```{r fig6}
 league_acro = 'PL'
 season = '2324'
 
@@ -679,7 +607,7 @@ p1 = ggplot(df_plot, aes(x = att_means, y = def_means, label = label)) +
   theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_x_continuous(limits = c(-2, 1.2)) +   # =- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
@@ -693,7 +621,7 @@ p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = label)) +
   theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_x_continuous(limits = c(-2, 1.2)) +   # =- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
@@ -792,7 +720,7 @@ rn = rownames(df_latex)
 rownames(df_latex) = paste0("\\textit{", rn, "}")
 
 # ---- 3. LaTeX table ----
-table3 = kable(
+table3_latex = kable(
   df_latex,
   format = "latex",
   booktabs = TRUE,                        # cleaner table, no row-by-row hlines
@@ -800,12 +728,12 @@ table3 = kable(
   escape = FALSE                          # allow italic row names
 )
 
-table3
+knitr::kable(df_latex)
 
 df_home_mu = c(pois_pars[1], sas_pars[1])
 df_home_sd = c(sd(MH_P$home_post[(t/5):t]), sd(MH_SAS$home_post[(t/5):t]))
 
-rbind(df_home_mu,df_home_sd)
+knitr::kable(rbind(df_home_mu,df_home_sd))
 ```
 
 #### Table 4
@@ -859,13 +787,14 @@ for (season in seasons_strvec){
 }
 
 IC_table = -2*(lppd_table - pwaic_table)
-round(cbind(lppd_table, pwaic_table, IC_table),1)
-
+out_table4 = round(cbind(lppd_table, pwaic_table, IC_table),1)
+rownames(out_table4) = c("lppd", "p_waic", "WAIC")
+knitr::kable(out_table4)
 ```
 
-#### Figure 8
+#### Figure 7
 
-```{r fig8}
+```{r fig7}
 league_acro = 'PL'
 season = '2324'
 df_hist = read_historics(season, league_acro)
@@ -905,6 +834,84 @@ combined_plot
 rbind(c('HomeWin', 'Draw', 'AwayWin'),
       sas_prob,
       pois_prob)
+```
+
+#### Figure 8
+
+```{r fig8}
+seasons_strvec = generate_season_string(2020, 2025)
+league_acro = 'PL'
+threshold = 0.5
+df_summary = data.frame()
+for (season in seasons_strvec){
+  if (league_acro == 'LC' && season == '1920'){next}
+  MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+  
+  df_z1 = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, 10001, 50000)
+  filter_idx = which(round(df_z1[1,],2) >= threshold)
+  team_filter = MH_SAS$team_names[filter_idx]
+  
+  df_nu = exp(retrieve_pars_summ(MH_SAS, c('nu'), burn_in = 0.2, c(0.1, 0.25, 0.5, 0.75, 0.9))[filter_idx, 2:6])
+      
+  df_tobind = cbind(rep(season, length(team_filter)),
+                    team_filter,
+                    df_nu)
+  colnames(df_tobind) = c('season', 'team', 'q10', 'q25', 'q50', 'q75', 'q90')
+  
+  df_summary = rbind(df_summary, df_tobind)
+}
+rownames(df_summary) = NULL
+
+df_summary = df_summary |>
+  mutate(across(c(q10, q25, q50, q75, q90), log)) |>
+
+# df_summary = df_summary |>
+  mutate(
+    color_flag = case_when(
+      q25 < 1 ~ "below",
+      q75 > 1 ~ "above",
+      TRUE ~ "neutral"
+    )
+  )
+# List to store plots
+plot_list = list()
+
+# Loop through seasons
+for (s in unique(df_summary$season)) {
+  if (s == unique(df_summary$season)[1]){first_fl = 1} else {first_fl = 0}
+  # Filter and sort teams in this season
+  df_season = df_summary |>
+    filter(season == s) |>
+    arrange(q50, q75, q25) |>
+    mutate(team = factor(team, levels = team))  # Factor levels only for this season
+  
+ p = ggplot(df_season, aes(x = team, fill = color_flag)) +
+    geom_boxplot(stat = "identity",
+                 aes(lower = q25, middle = q50, upper = q75, ymin = q10, ymax = q90)) +
+    scale_fill_manual(values = c("below" = "#1b9e77", "above" = "#d95f02")) +
+    scale_y_continuous(breaks = seq(0, 2.5, by = 0.5)) +   # =- add this
+    labs(title = paste0("20",substr(s, 1, 2), "/", substr(s, 3, 4)), x = "",
+         y = if (first_fl) expression(P(nu[i] ~ "|" ~ bold(Y))) else NULL) +
+    coord_cartesian(ylim = c(0, 2.5)) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "none",
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      panel.background = element_rect(fill = "#f9f9f9", color = NA),
+      panel.grid.major = element_line(color = "grey90"),
+      panel.grid.minor = element_blank(),
+      axis.text.y  = if (first_fl) element_text() else element_blank(),
+      axis.ticks.y = if (first_fl) element_line() else element_blank(),
+      axis.title.y = if (first_fl) element_text() else element_blank()
+    )
+ 
+  
+  plot_list[[as.character(s)]] = p
+}
+
+# Combine plots in 2 rows x 5 columns
+combined_fig8 = wrap_plots(plot_list, nrow = 1, ncol = 5)
 ```
 
 #### Table 6
@@ -957,7 +964,9 @@ for (season in seasons_strvec){
 }
 
 IC_table = -2*(lppd_table - pwaic_table)
-round(IC_table,1)
+out_table6 = round(IC_table,1)
+rownames(out_table6) = c("Poisson", "CMP-SAS", "CMP-Full")
+knitr::kable(out_table6)
 ```
 
 #### Table 7
@@ -982,10 +991,10 @@ overunder_oos = compute_overunder_eval(league_acro = league_acro, seas_start, se
 gd_oos = compute_goaldiff_eval(league_acro = league_acro, seas_start, seas_end, 'oos', 
                                filter = filter_code, threshold = threshold)
 
-out_table = round(rbind(outcome_oos[4:6,1:5], 
+out_table7 = round(rbind(outcome_oos[4:6,1:5], 
                         overunder_oos[4:6,1:5], 
                         gd_oos[4:6,1:5]),3)
-out_table
+knitr::kable(out_table7)
 ```
 
 

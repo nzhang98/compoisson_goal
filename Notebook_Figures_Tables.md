@@ -18,129 +18,11 @@ library(cowplot)
 library(ggridges)
 library(forcats)
 library(kableExtra)
+library(knitr)
 mcmc_out_dir = "Data/MCMC_Outputs/"
 ```
 
-##### Figure 1
-
-``` r
-X = read_data('2324', 'Premier')
-X1 = X[[1]]
-X2 = X[[2]]
-
-# Remove diagonals
-X1_nodiag = X1[upper.tri(X1) | lower.tri(X1)]
-X2_nodiag = X2[upper.tri(X2) | lower.tri(X2)]
-
-# Truncate values > 7
-X1_nodiag = X1_nodiag[X1_nodiag <= 7]
-X2_nodiag = X2_nodiag[X2_nodiag <= 7]
-
-# Convert to factors for exact bins 0 to 7
-X1_factor = factor(X1_nodiag, levels = 0:7)
-X2_factor = factor(X2_nodiag, levels = 0:7)
-
-# Calculate means for vertical lines
-mean_X1 = mean(as.numeric(as.character(X1_factor)))
-mean_X2 = mean(as.numeric(as.character(X2_factor)))
-var_X1 = var(as.numeric(as.character(X1_factor)))
-var_X2 = var(as.numeric(as.character(X2_factor)))
-
-# Create individual plots
-
-p1 = ggplot(data.frame(value = X1_factor), aes(x = value)) +
-  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
-  geom_vline(xintercept = mean_X1 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
-  geom_vline(xintercept = var_X1 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
-  scale_x_discrete(drop = FALSE) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  labs(x = "Home Goals Scored", y = "Number of Matches") +
-  theme_minimal() +
-  theme(
-    axis.title.x = element_text(size = 12),
-    axis.title.y = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    plot.margin = margin(t = 5, r = 10, b = 5, l = 5)
-  )
-
-p2 = ggplot(data.frame(value = X2_factor), aes(x = value)) +
-  geom_bar(fill = "#87CEEB", color = "black", width = 1) +
-  geom_vline(xintercept = mean_X2 + 1, linetype = "solid", color = "#0072B2", linewidth = 1) +
-  geom_vline(xintercept = var_X2 + 1, linetype = "dashed", color = "#8E44AD", linewidth = 0.8) +
-  scale_x_discrete(drop = FALSE) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
-  labs(x = "Away Goals Scored", y = NULL) +
-  theme_minimal() +
-  theme(
-    axis.title.x = element_text(size = 12),
-    axis.text = element_text(size = 10),
-    axis.ticks.y = element_blank(),
-    axis.text.y = element_blank(),
-    plot.margin = margin(t = 5, r = 5, b = 5, l = 10)
-  )
-
-# Get max y-axis limit to sync y scales
-max_y = max(ggplot_build(p1)$data[[1]]$count, ggplot_build(p2)$data[[1]]$count)
-
-# Fix y-axis limits to be the same
-p1 = p1 + coord_cartesian(ylim = c(0, max_y))
-p2 = p2 + coord_cartesian(ylim = c(0, max_y))
-
-# Combine with patchwork, add space between plots
-combined_plot = p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1)) & 
-  theme(plot.margin = margin(10, 10, 10, 10)) 
-
-print(combined_plot)
-```
-
-![](Notebook_Figures_Tables_files/figure-commonmark/fig1-1.png)
-
 ##### Figure 2
-
-``` r
-season = '2324'
-league_acro = 'PL'
-league = 'Premier'
-
-X = read_data(season, league)
-X1 = X[[1]]
-X2 = X[[2]]
-
-df_hist = read_historics(season, league_acro)
-team_names = sort(unique(df_hist[,"HomeTeam"]))
-N = length(team_names)
-rownames(X1) = team_names
-rownames(X2) = team_names
-team_codes = setNames(1:N, team_names)
-
-plots = list()
-for (j in 1:N){
-  goals = unname(append(X1[j,],X2[,j]))
-  goals = goals[!is.na(goals)]
-  
-  if (mean(goals)/var(goals) > 1){disp_color = '#D55E00'}else{disp_color = '#009E73'}
-  
-  mean_goals = mean(goals)
-  var_goals = var(goals)
-  
-  p = ggplot(data.frame(goals), aes(x = goals)) +
-    coord_cartesian(xlim=c(0,7), ylim=c(0,15)) +
-    geom_histogram(binwidth = 1, fill = disp_color, color = 'black') +
-    geom_vline(xintercept = mean_goals, linetype = "solid", color = "#0072B2", linewidth = 0.8) +
-    geom_vline(xintercept = var_goals, linetype = "dashed", color = "#8E44AD", linewidth = 0.6) +
-    theme_minimal() +
-    theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
-    ggtitle(paste(team_names[j]))
-  
-  plots[[j]] = p
-}
-
-do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
-```
-
-![](Notebook_Figures_Tables_files/figure-commonmark/fig2-1.png)
-
-##### Figure 4
 
 ``` r
 compute_Z = function(mu, nu, j_max = 100) {
@@ -227,7 +109,7 @@ p2 = generate_cmp_contour_plot(x, 1, 2)
 p1+p2
 ```
 
-![](Notebook_Figures_Tables_files/figure-commonmark/fig4-1.png)
+![](Notebook_Figures_Tables_files/figure-commonmark/fig2-1.png)
 
 ##### Figure 3
 
@@ -269,7 +151,7 @@ for (nu_scalar in nus_overdispersed){
     
     {
       nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
-      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      # included = as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
       included = as.integer(nu_summ[1,] >= threshold)
       
       vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
@@ -284,16 +166,16 @@ for (nu_scalar in nus_overdispersed){
   significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
 }
 
-df1 <- as.data.frame(big_Z_nd)
-df2 <- as.data.frame(big_Z_ed)
+df1 = as.data.frame(big_Z_nd)
+df2 = as.data.frame(big_Z_ed)
 
-df1$ID <- 1:nrow(df1)
-df2$ID <- 1:nrow(df2)
-df1$Group <- "Overdispersed"
-df2$Group <- "Equidispersed"
-df_long <- bind_rows(df1, df2)
+df1$ID = 1:nrow(df1)
+df2$ID = 1:nrow(df2)
+df1$Group = "Overdispersed"
+df2$Group = "Equidispersed"
+df_long = bind_rows(df1, df2)
 
-df_long <- pivot_longer(
+df_long = pivot_longer(
   df_long,
   cols = all_of(as.character(nus_overdispersed)),
   names_to = "Variable",
@@ -357,7 +239,7 @@ for (nu_scalar in nus_underdispersed){
     
     {
       nu_summ = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, t/5, t, sim$nu_true)
-      # included <- as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
+      # included = as.integer(!((nu_summ[3, ] <= 1) & (1 <= nu_summ[5, ])))
       included = as.integer(nu_summ[1,] >= threshold)
       
       vec_sign_nu_nd = c(vec_sign_nu_nd, included[sim$nu_true != 1])
@@ -372,16 +254,16 @@ for (nu_scalar in nus_underdispersed){
   significant_nu_ed[,as.character(nu_scalar)] = vec_sign_nu_ed
 }
 
-df1 <- as.data.frame(big_Z_nd)
-df2 <- as.data.frame(big_Z_ed)
+df1 = as.data.frame(big_Z_nd)
+df2 = as.data.frame(big_Z_ed)
 
-df1$ID <- 1:nrow(df1)
-df2$ID <- 1:nrow(df2)
-df1$Group <- "Underdispersed"
-df2$Group <- "Equidispersed"
-df_long <- bind_rows(df1, df2)
+df1$ID = 1:nrow(df1)
+df2$ID = 1:nrow(df2)
+df1$Group = "Underdispersed"
+df2$Group = "Equidispersed"
+df_long = bind_rows(df1, df2)
 
-df_long <- pivot_longer(
+df_long = pivot_longer(
   df_long,
   cols = all_of(as.character(nus_underdispersed)),
   names_to = "Variable",
@@ -418,18 +300,17 @@ p_od / p_ud
 ##### Table 1
 
 ``` r
-out_table = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
+out_table1 = rbind(c(colMeans(od_sign_ed), colMeans(ud_sign_ed)),
             c(colMeans(od_sign_nd), colMeans(ud_sign_nd)))
 
-out_table
+rownames(out_table1) = c("FP", "TP")
+knitr::kable(out_table1)
 ```
 
-          0.2  0.3  0.4  0.5  0.6  0.7  0.8  0.9  1.2  1.6    2  2.4  2.8  3.2  3.6
-    [1,] 0.12 0.16 0.12 0.10 0.10 0.16 0.12 0.16 0.06 0.14 0.04 0.12 0.10 0.12 0.12
-    [2,] 1.00 0.94 0.90 0.58 0.48 0.22 0.14 0.04 0.18 0.42 0.52 0.84 0.84 0.94 0.94
-            4
-    [1,] 0.06
-    [2,] 0.98
+|     |  0.2 |  0.3 |  0.4 |  0.5 |  0.6 |  0.7 |  0.8 |  0.9 |  1.2 |  1.6 |    2 |  2.4 |  2.8 |  3.2 |  3.6 |    4 |
+|:----|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|-----:|
+| FP  | 0.12 | 0.16 | 0.12 | 0.10 | 0.10 | 0.16 | 0.12 | 0.16 | 0.06 | 0.14 | 0.04 | 0.12 | 0.10 | 0.12 | 0.12 | 0.06 |
+| TP  | 1.00 | 0.94 | 0.90 | 0.58 | 0.48 | 0.22 | 0.14 | 0.04 | 0.18 | 0.42 | 0.52 | 0.84 | 0.84 | 0.94 | 0.94 | 0.98 |
 
 ##### Table 2
 
@@ -468,23 +349,62 @@ for (nu_scalar in disp_vec){
   }
 }
 
-waic_table
+rownames(waic_table) = c("Poisson", "CMP-SAS", "CMP-Full")
+knitr::kable(waic_table)
 ```
 
-           0.3      0.3      0.3      0.6      0.6      0.6      0.9      0.9
-    1 2836.559 2789.239 2873.057 2263.988 2393.089 2354.292 2131.330 2189.933
-    2 2640.590 2619.607 2656.669 2242.318 2374.925 2325.963 2130.564 2190.800
-    3 2646.432 2615.360 2657.717 2244.390 2375.235 2329.336 2133.790 2208.895
-           0.9      1.2      1.2      1.2        2        2        2        4
-    1 2157.190 2060.392 2055.170 2109.857 1918.956 1914.991 1939.388 1838.586
-    2 2159.909 2066.579 2054.312 2115.899 1914.236 1899.143 1931.012 1752.425
-    3 2176.004 2081.218 2067.841 2125.238 1920.374 1908.140 1937.320 1749.964
-             4        4
-    1 1841.329 1861.584
-    2 1754.530 1783.243
-    3 1751.591 1781.076
+|  | 0.3 | 0.3 | 0.3 | 0.6 | 0.6 | 0.6 | 0.9 | 0.9 | 0.9 | 1.2 | 1.2 | 1.2 | 2 | 2 | 2 | 4 | 4 | 4 |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Poisson | 2836.559 | 2789.239 | 2873.057 | 2263.988 | 2393.089 | 2354.292 | 2131.330 | 2189.933 | 2157.190 | 2060.392 | 2055.170 | 2109.857 | 1918.956 | 1914.991 | 1939.388 | 1838.586 | 1841.329 | 1861.584 |
+| CMP-SAS | 2640.590 | 2619.607 | 2656.669 | 2242.318 | 2374.925 | 2325.963 | 2130.564 | 2190.800 | 2159.909 | 2066.579 | 2054.312 | 2115.899 | 1914.236 | 1899.143 | 1931.012 | 1752.425 | 1754.530 | 1783.243 |
+| CMP-Full | 2646.432 | 2615.360 | 2657.717 | 2244.390 | 2375.235 | 2329.336 | 2133.790 | 2208.895 | 2176.004 | 2081.218 | 2067.841 | 2125.238 | 1920.374 | 1908.140 | 1937.320 | 1749.964 | 1751.591 | 1781.076 |
 
-##### Figure 6
+##### Figure 4
+
+``` r
+season = '2324'
+league_acro = 'PL'
+league = 'Premier'
+
+X = read_data(season, league)
+X1 = X[[1]]
+X2 = X[[2]]
+
+df_hist = read_historics(season, league_acro)
+team_names = sort(unique(df_hist[,"HomeTeam"]))
+N = length(team_names)
+rownames(X1) = team_names
+rownames(X2) = team_names
+team_codes = setNames(1:N, team_names)
+
+plots = list()
+for (j in 1:N){
+  goals = unname(append(X1[j,],X2[,j]))
+  goals = goals[!is.na(goals)]
+  
+  if (mean(goals)/var(goals) > 1){disp_color = '#D55E00'}else{disp_color = '#009E73'}
+  
+  mean_goals = mean(goals)
+  var_goals = var(goals)
+  
+  p = ggplot(data.frame(goals), aes(x = goals)) +
+    coord_cartesian(xlim=c(0,7), ylim=c(0,15)) +
+    geom_histogram(binwidth = 1, fill = disp_color, color = 'black') +
+    geom_vline(xintercept = mean_goals, linetype = "solid", color = "#0072B2", linewidth = 0.8) +
+    geom_vline(xintercept = var_goals, linetype = "dashed", color = "#8E44AD", linewidth = 0.6) +
+    theme_minimal() +
+    theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+    ggtitle(paste(team_names[j]))
+  
+  plots[[j]] = p
+}
+
+do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
+```
+
+![](Notebook_Figures_Tables_files/figure-commonmark/fig4-1.png)
+
+##### Figure 5
 
 ``` r
 league_acro = 'PL'
@@ -629,9 +549,9 @@ p3 = ggplot(df_z1, aes(
 p2+p3
 ```
 
-![](Notebook_Figures_Tables_files/figure-commonmark/fig6-1.png)
+![](Notebook_Figures_Tables_files/figure-commonmark/fig5-1.png)
 
-##### Figure 7
+##### Figure 6
 
 ##### Att and Mean scatter plot comparison
 
@@ -699,7 +619,7 @@ p1 = ggplot(df_plot, aes(x = att_means, y = def_means, label = label)) +
   theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_x_continuous(limits = c(-2, 1.2)) +   # =- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
@@ -713,7 +633,7 @@ p2 = ggplot(df_plot2, aes(x = att_means, y = def_means, label = label)) +
   theme_minimal() +
   geom_vline(xintercept = 0, linetype = 'dashed', alpha = 0.2) +
   geom_hline(yintercept = 0, linetype = 'dashed', alpha = 0.2) +
-  scale_x_continuous(limits = c(-2, 1.2)) +   # <-- control x here
+  scale_x_continuous(limits = c(-2, 1.2)) +   # =- control x here
   scale_y_continuous(limits = c(-1, 0.8)) +
   ylab('') + xlab('') +
   theme(plot.title = element_text(face = "bold")) +
@@ -760,7 +680,7 @@ final_plot = ggdraw(final_plot) +
 final_plot
 ```
 
-![](Notebook_Figures_Tables_files/figure-commonmark/fig7-1.png)
+![](Notebook_Figures_Tables_files/figure-commonmark/fig6-1.png)
 
 ##### Table 3
 
@@ -814,7 +734,7 @@ rn = rownames(df_latex)
 rownames(df_latex) = paste0("\\textit{", rn, "}")
 
 # ---- 3. LaTeX table ----
-table3 = kable(
+table3_latex = kable(
   df_latex,
   format = "latex",
   booktabs = TRUE,                        # cleaner table, no row-by-row hlines
@@ -822,19 +742,43 @@ table3 = kable(
   escape = FALSE                          # allow italic row names
 )
 
-table3
+knitr::kable(df_latex)
 ```
+
+|  | V1 | V2 | V3 | V4 | V5 | V6 |
+|:---|:---|:---|:---|:---|:---|---:|
+|  | -0.223 {(0.150)} | 0.117 {(0.127)} | 0.054 {(0.182)} | 0.121 {(0.127)} | 1.395 {(0.572)} | 0.53 |
+|  | 0.390 {(0.110)} | -0.420 {(0.168)} | 0.559 {(0.123)} | -0.399 {(0.165)} | 1.261 {(0.423)} | 0.46 |
+|  | -0.113 {(0.141)} | 0.123 {(0.125)} | 0.116 {(0.189)} | 0.121 {(0.125)} | 1.241 {(0.447)} | 0.44 |
+|  | -0.069 {(0.140)} | 0.093 {(0.129)} | 0.110 {(0.177)} | 0.084 {(0.126)} | 1.059 {(0.255)} | 0.30 |
+|  | -0.426 {(0.167)} | 0.280 {(0.118)} | -0.237 {(0.304)} | 0.273 {(0.114)} | 1.025 {(0.275)} | 0.33 |
+|  | 0.500 {(0.106)} | -0.642 {(0.185)} | 0.624 {(0.126)} | -0.607 {(0.178)} | 1.005 {(0.161)} | 0.24 |
+|  | -0.137 {(0.147)} | 0.388 {(0.113)} | 0.025 {(0.214)} | 0.375 {(0.110)} | 0.999 {(0.214)} | 0.29 |
+|  | 0.396 {(0.112)} | 0.065 {(0.133)} | 0.522 {(0.140)} | 0.068 {(0.130)} | 0.986 {(0.157)} | 0.25 |
+|  | 0.272 {(0.119)} | 0.041 {(0.135)} | 0.393 {(0.203)} | 0.037 {(0.130)} | 0.985 {(0.168)} | 0.25 |
+|  | -0.056 {(0.140)} | -0.035 {(0.138)} | 0.089 {(0.205)} | -0.033 {(0.132)} | 0.973 {(0.189)} | 0.28 |
+|  | -0.055 {(0.139)} | -0.037 {(0.137)} | 0.059 {(0.374)} | -0.037 {(0.134)} | 0.968 {(0.208)} | 0.29 |
+|  | 0.017 {(0.134)} | 0.243 {(0.121)} | 0.132 {(0.311)} | 0.232 {(0.118)} | 0.963 {(0.207)} | 0.29 |
+|  | 0.440 {(0.107)} | -0.852 {(0.205)} | 0.549 {(0.149)} | -0.793 {(0.200)} | 0.962 {(0.161)} | 0.27 |
+|  | -0.479 {(0.169)} | -0.203 {(0.148)} | -0.343 {(0.384)} | -0.196 {(0.142)} | 0.958 {(0.242)} | 0.33 |
+|  | 0.241 {(0.120)} | 0.035 {(0.132)} | 0.333 {(0.300)} | 0.031 {(0.134)} | 0.952 {(0.195)} | 0.29 |
+|  | -0.602 {(0.186)} | 0.589 {(0.104)} | -0.606 {(0.736)} | 0.568 {(0.102)} | 0.919 {(0.318)} | 0.40 |
+|  | 0.285 {(0.118)} | 0.074 {(0.133)} | 0.252 {(0.424)} | 0.070 {(0.130)} | 0.819 {(0.265)} | 0.46 |
+|  | -0.200 {(0.148)} | 0.087 {(0.129)} | -0.475 {(0.948)} | 0.074 {(0.127)} | 0.766 {(0.314)} | 0.51 |
+|  | -0.092 {(0.141)} | 0.037 {(0.130)} | -0.325 {(0.681)} | 0.028 {(0.131)} | 0.729 {(0.305)} | 0.58 |
+|  | -0.090 {(0.142)} | 0.017 {(0.134)} | -1.831 {(1.501)} | -0.018 {(0.130)} | 0.323 {(0.239)} | 0.94 |
 
 ``` r
 df_home_mu = c(pois_pars[1], sas_pars[1])
 df_home_sd = c(sd(MH_P$home_post[(t/5):t]), sd(MH_SAS$home_post[(t/5):t]))
 
-rbind(df_home_mu,df_home_sd)
+knitr::kable(rbind(df_home_mu,df_home_sd))
 ```
 
-                   home_1     home_1
-    df_home_mu 0.47380539 0.37932212
-    df_home_sd 0.04056075 0.06466132
+|            |    home_1 |    home_1 |
+|:-----------|----------:|----------:|
+| df_home_mu | 0.4738054 | 0.3793221 |
+| df_home_sd | 0.0405608 | 0.0646613 |
 
 #### Table 4
 
@@ -887,15 +831,18 @@ for (season in seasons_strvec){
 }
 
 IC_table = -2*(lppd_table - pwaic_table)
-round(cbind(lppd_table, pwaic_table, IC_table),1)
+out_table4 = round(cbind(lppd_table, pwaic_table, IC_table),1)
+rownames(out_table4) = c("lppd", "p_waic", "WAIC")
+knitr::kable(out_table4)
 ```
 
-         2324 2324   2324
-    1 -1159.8 40.4 2400.3
-    2 -1141.7 43.3 2370.0
-    3 -1143.7 49.3 2386.1
+|        |    2324 | 2324 |   2324 |
+|:-------|--------:|-----:|-------:|
+| lppd   | -1159.8 | 40.4 | 2400.3 |
+| p_waic | -1141.7 | 43.3 | 2370.0 |
+| WAIC   | -1143.7 | 49.3 | 2386.1 |
 
-#### Figure 8
+#### Figure 7
 
 ``` r
 league_acro = 'PL'
@@ -923,7 +870,7 @@ pois_heatplot = plot_heatmap(pois_mat, "Poisson Model",x = as.numeric(hg), y = a
 
 combined_plot = (pois_heatplot | plot_spacer() | sas_heatplot) +
   plot_layout(widths = c(1, 0, 1)) +
-  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", Premier League ", season, ", Out of sample prediction % probabilities"))
+  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", PL Season 2023/24, Out of sample prediction % probabilities"))
 
 sas_prob = c(sum(sas_mat[upper.tri(sas_mat)]),
              sum(diag(sas_mat)),
@@ -935,7 +882,7 @@ pois_prob = c(sum(pois_mat[upper.tri(pois_mat)]),
 combined_plot 
 ```
 
-![](Notebook_Figures_Tables_files/figure-commonmark/fig8-1.png)
+![](Notebook_Figures_Tables_files/figure-commonmark/fig7-1.png)
 
 ``` r
 rbind(c('HomeWin', 'Draw', 'AwayWin'),
@@ -947,6 +894,84 @@ rbind(c('HomeWin', 'Draw', 'AwayWin'),
               "HomeWin" "Draw"   "AwayWin"
     sas_prob  "49.704"  "23.288" "27.008" 
     pois_prob "54.076"  "26.306" "19.618" 
+
+#### Figure 8
+
+``` r
+seasons_strvec = generate_season_string(2020, 2025)
+league_acro = 'PL'
+threshold = 0.5
+df_summary = data.frame()
+for (season in seasons_strvec){
+  if (league_acro == 'LC' && season == '1920'){next}
+  MH_SAS = readRDS(file = paste0("Data//MCMC_Outputs//SAS_FullLeague//",league_acro,"_",season,"_SAS.rds"))
+  
+  df_z1 = retrieve_nu_sas_summ(MH_SAS$Z_post, MH_SAS$nu_post, 10001, 50000)
+  filter_idx = which(round(df_z1[1,],2) >= threshold)
+  team_filter = MH_SAS$team_names[filter_idx]
+  
+  df_nu = exp(retrieve_pars_summ(MH_SAS, c('nu'), burn_in = 0.2, c(0.1, 0.25, 0.5, 0.75, 0.9))[filter_idx, 2:6])
+      
+  df_tobind = cbind(rep(season, length(team_filter)),
+                    team_filter,
+                    df_nu)
+  colnames(df_tobind) = c('season', 'team', 'q10', 'q25', 'q50', 'q75', 'q90')
+  
+  df_summary = rbind(df_summary, df_tobind)
+}
+rownames(df_summary) = NULL
+
+df_summary = df_summary |>
+  mutate(across(c(q10, q25, q50, q75, q90), log)) |>
+
+# df_summary = df_summary |>
+  mutate(
+    color_flag = case_when(
+      q25 < 1 ~ "below",
+      q75 > 1 ~ "above",
+      TRUE ~ "neutral"
+    )
+  )
+# List to store plots
+plot_list = list()
+
+# Loop through seasons
+for (s in unique(df_summary$season)) {
+  if (s == unique(df_summary$season)[1]){first_fl = 1} else {first_fl = 0}
+  # Filter and sort teams in this season
+  df_season = df_summary |>
+    filter(season == s) |>
+    arrange(q50, q75, q25) |>
+    mutate(team = factor(team, levels = team))  # Factor levels only for this season
+  
+ p = ggplot(df_season, aes(x = team, fill = color_flag)) +
+    geom_boxplot(stat = "identity",
+                 aes(lower = q25, middle = q50, upper = q75, ymin = q10, ymax = q90)) +
+    scale_fill_manual(values = c("below" = "#1b9e77", "above" = "#d95f02")) +
+    scale_y_continuous(breaks = seq(0, 2.5, by = 0.5)) +   # =- add this
+    labs(title = paste0("20",substr(s, 1, 2), "/", substr(s, 3, 4)), x = "",
+         y = if (first_fl) expression(P(nu[i] ~ "|" ~ bold(Y))) else NULL) +
+    coord_cartesian(ylim = c(0, 2.5)) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "none",
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      panel.background = element_rect(fill = "#f9f9f9", color = NA),
+      panel.grid.major = element_line(color = "grey90"),
+      panel.grid.minor = element_blank(),
+      axis.text.y  = if (first_fl) element_text() else element_blank(),
+      axis.ticks.y = if (first_fl) element_line() else element_blank(),
+      axis.title.y = if (first_fl) element_text() else element_blank()
+    )
+ 
+  
+  plot_list[[as.character(s)]] = p
+}
+
+# Combine plots in 2 rows x 5 columns
+combined_fig8 = wrap_plots(plot_list, nrow = 1, ncol = 5)
+```
 
 #### Table 6
 
@@ -999,13 +1024,16 @@ for (season in seasons_strvec){
 }
 
 IC_table = -2*(lppd_table - pwaic_table)
-round(IC_table,1)
+out_table6 = round(IC_table,1)
+rownames(out_table6) = c("Poisson", "CMP-SAS", "CMP-Full")
+knitr::kable(out_table6)
 ```
 
-        2021   2122   2223   2324   2425
-    1 2296.4 2242.2 2286.1 2400.3 2312.8
-    2 2280.5 2236.4 2277.9 2370.0 2293.1
-    3 2290.1 2246.2 2287.5 2386.1 2305.6
+|          |   2021 |   2122 |   2223 |   2324 |   2425 |
+|:---------|-------:|-------:|-------:|-------:|-------:|
+| Poisson  | 2296.4 | 2242.2 | 2286.1 | 2400.3 | 2312.8 |
+| CMP-SAS  | 2280.5 | 2236.4 | 2277.9 | 2370.0 | 2293.1 |
+| CMP-Full | 2290.1 | 2246.2 | 2287.5 | 2386.1 | 2305.6 |
 
 #### Table 7
 
@@ -1029,19 +1057,20 @@ overunder_oos = compute_overunder_eval(league_acro = league_acro, seas_start, se
 gd_oos = compute_goaldiff_eval(league_acro = league_acro, seas_start, seas_end, 'oos', 
                                filter = filter_code, threshold = threshold)
 
-out_table = round(rbind(outcome_oos[4:6,1:5], 
+out_table7 = round(rbind(outcome_oos[4:6,1:5], 
                         overunder_oos[4:6,1:5], 
                         gd_oos[4:6,1:5]),3)
-out_table
+knitr::kable(out_table7)
 ```
 
-               2021  2122  2223  2324  2425
-    IGN-Pois  1.497 1.403 1.401 1.326 1.415
-    IGN-SAS   1.480 1.399 1.401 1.326 1.397
-    IGN-CMP   1.481 1.396 1.404 1.330 1.391
-    IGN-Pois1 1.019 1.063 0.961 0.974 1.025
-    IGN-SAS1  0.998 1.056 0.960 0.929 1.004
-    IGN-CMP1  0.997 1.064 0.967 0.925 1.011
-    IGN-Pois2 2.801 2.948 2.878 2.940 2.858
-    IGN-SAS2  2.796 2.936 2.861 2.937 2.845
-    IGN-CMP2  2.806 2.932 2.866 2.948 2.846
+|           |  2021 |  2122 |  2223 |  2324 |  2425 |
+|:----------|------:|------:|------:|------:|------:|
+| IGN-Pois  | 1.497 | 1.403 | 1.401 | 1.326 | 1.415 |
+| IGN-SAS   | 1.480 | 1.399 | 1.401 | 1.326 | 1.397 |
+| IGN-CMP   | 1.481 | 1.396 | 1.404 | 1.330 | 1.391 |
+| IGN-Pois1 | 1.019 | 1.063 | 0.961 | 0.974 | 1.025 |
+| IGN-SAS1  | 0.998 | 1.056 | 0.960 | 0.929 | 1.004 |
+| IGN-CMP1  | 0.997 | 1.064 | 0.967 | 0.925 | 1.011 |
+| IGN-Pois2 | 2.801 | 2.948 | 2.878 | 2.940 | 2.858 |
+| IGN-SAS2  | 2.796 | 2.936 | 2.861 | 2.937 | 2.845 |
+| IGN-CMP2  | 2.806 | 2.932 | 2.866 | 2.948 | 2.846 |
