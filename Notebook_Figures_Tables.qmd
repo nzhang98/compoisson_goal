@@ -891,7 +891,7 @@ pois_heatplot = plot_heatmap(pois_mat, "Poisson Model",x = as.numeric(hg), y = a
 
 combined_plot = (pois_heatplot | plot_spacer() | sas_heatplot) +
   plot_layout(widths = c(1, 0, 1)) +
-  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", Premier League ", season, ", Out of sample prediction % probabilities"))
+  plot_annotation(title = paste0("(Home) ",ht," - ",at," (Away), Result: ",hg,"-",ag, ", PL Season 2023/24, Out of sample prediction % probabilities"))
 
 sas_prob = c(sum(sas_mat[upper.tri(sas_mat)]),
              sum(diag(sas_mat)),
