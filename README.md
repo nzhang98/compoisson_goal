@@ -1,7 +1,8 @@
 # compoisson_goal
 Repository for the paper on the Conway-Maxwell Poisson Goal model with Spike-and-Slab priors on the dispersion parameters for association football scores.
 
-- 'utils.R': contains all utility functions needed to import data, working with MH objects, creating predictions, evaluating the models, etc.;
+- 'Notebook_Figures_Tables.md': Contains all code to generate results, plots and tables shown in the paper. Requires MCMC outputs from seasons 2020/21 up to 2024/25 from the English Premier league.
+- 'utils.R': Contains all utility functions needed to import data, working with MH objects, creating predictions, evaluating the models, etc.;
 - 'MH_Poisson.R': Contains the MH algorithm to infer the parameters for the Poisson Goal model;
 - 'MH_CMP_SAS.R': Contains the MWGS to infer the parameters for the COMPoisson Goal model with Spike-and-Slab;
 - 'MH_CMP_Full.R': Contains the MWGS for the fully CMP model (i.e. indicators Z = 1 for all i);

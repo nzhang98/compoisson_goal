@@ -111,6 +111,10 @@ p1+p2
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig2-1.png)
 
+``` r
+# ggsave("Fig2_Contours_Fixed.jpg", plot = p1+p2, width = 2000, height = 1200, units = "px", dpi = 300)
+```
+
 ##### Figure 3
 
 ``` r
@@ -297,6 +301,10 @@ p_od / p_ud
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig3-1.png)
 
+``` r
+#ggsave("Fig3_Simulations_OD_UD_combined.tif", plot = p_od / p_ud, width = 3000, height = 1800, units = "px", dpi = 300)
+```
+
 ##### Table 1
 
 ``` r
@@ -399,10 +407,14 @@ for (j in 1:N){
   plots[[j]] = p
 }
 
-do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
+g = do.call("grid.arrange", c(plots, nrow = 4, ncol = 5, left = 'Number of Matches', bottom = 'Goals'))
 ```
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig4-1.png)
+
+``` r
+# ggsave("Fig4_IndHistograms_PL2324.jpg", plot = g, width = 3000, height = 2000, units = "px", dpi = 300)
+```
 
 ##### Figure 5
 
@@ -506,7 +518,7 @@ p2 = ggplot(summary_df2, aes(
     panel.grid.minor = element_blank()
   ) +
   labs(
-    title = "(a)",
+    title = "(A)",
     x = expression(log ~ P(nu[i] ~ "|" ~ Z[i] == 1, bold(Y))),
     y = NULL
   ) +
@@ -532,7 +544,7 @@ p3 = ggplot(df_z1, aes(
   scale_y_discrete(expand = c(0,0)) +   # remove padding
   coord_cartesian(clip = "off", ylim = c(1, 20.87)) +
   labs(
-    title = "(b)",
+    title = "(B)",
     x = expression(P(Z[i] == 1 ~ "|" ~ bold(Y))),
     y = NULL
   ) +
@@ -550,6 +562,10 @@ p2+p3
 ```
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig5-1.png)
+
+``` r
+# ggsave("Fig5_SlabDensityZ.jpg", plot = p2+p3, width = 1600, height = 1200, units = "px", dpi = 300)
+```
 
 ##### Figure 6
 
@@ -666,10 +682,10 @@ combined = plot_grid(p1, p2, nrow = 1, ncol = 2)
 final_plot = ggdraw(combined) +
   draw_grob(
     boxed_legend,
-    x      = 0.46,   # left edge of box (0 = far left, 1 = far right)
-    y      = 0.70,   # bottom edge of box (0 = bottom, 1 = top)
-    width  = 0.16,   # box width  — increase if text is clipped
-    height = 0.18    # box height — increase if items overlap
+    x      = 0.42,   # left edge of box (0 = far left, 1 = far right)
+    y      = 0.75,   # bottom edge of box (0 = bottom, 1 = top)
+    width  = 0.10,   # box width  — increase if text is clipped
+    height = 0.12    # box height — increase if items overlap
   )
 
 # --- Add shared axis labels ---
@@ -681,6 +697,10 @@ final_plot
 ```
 
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig6-1.png)
+
+``` r
+# save_plot("Fig6_AttDef_2324.jpg", plot = final_plot, base_width = 4000, base_height = 2100, units = "px", dpi = 300)
+```
 
 ##### Table 3
 
@@ -885,6 +905,8 @@ combined_plot
 ![](Notebook_Figures_Tables_files/figure-commonmark/fig7-1.png)
 
 ``` r
+# save_plot("Fig7_PosteriorPredictive_MUD_FUL.jpg", plot = combined_plot, base_width = 4000, base_height = 1600, units = "px", dpi = 300)
+
 rbind(c('HomeWin', 'Draw', 'AwayWin'),
       sas_prob,
       pois_prob)
@@ -969,8 +991,16 @@ for (s in unique(df_summary$season)) {
   plot_list[[as.character(s)]] = p
 }
 
-# Combine plots in 2 rows x 5 columns
+# Combine plots in 1 rows x 5 columns
 combined_fig8 = wrap_plots(plot_list, nrow = 1, ncol = 5)
+
+combined_fig8
+```
+
+![](Notebook_Figures_Tables_files/figure-commonmark/fig8-1.png)
+
+``` r
+#save_plot("Fig8_PL_Disp_5Seas_Boxplot.tif", plot = combined_fig8, base_width = 3000, base_height = 1200, units = "px", dpi = 300)
 ```
 
 #### Table 6
